@@ -43,7 +43,14 @@ Somente os itens aprovados poderão ser movimentados, com registro do resultado 
 - **Falhas explícitas:** resultados incertos exigem reconciliação; não autorizam repetição automática de efeitos.
 - **Código explicável:** responsabilidades claras, testes e documentação acompanhando a implementação.
 
-Os nomes e caminhos físicos das pastas serão definidos pela configuração de cada ambiente.
+O planejamento prevê um painel web administrativo para cadastrar várias pastas
+por empresa, em discos ou compartilhamentos independentes. Cada local terá ações,
+alcance, limites e rotas de movimentação explícitos. O backend combina essas regras
+com as permissões do solicitante a cada acesso. Leitura não concede envio; cadastro
+não substitui aprovação de movimentações. Não há pasta global obrigatória.
+
+Detalhes e transição: [política de acesso a arquivos](docs/FILE_ACCESS_POLICY.md).
+O painel e essa política ainda serão implementados; a base atual não os oferece.
 
 ## Arquitetura proposta
 
