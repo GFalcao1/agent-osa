@@ -10,10 +10,11 @@ com dígitos verificadores e zeros iniciais preservados.
 
 **Local autorizado**: Pasta cadastrada com identidade estável, empresa associada
 ou papel explícito de entrada compartilhada, e alcance definido.
-_Evitar_: Pasta global obrigatória, Pasta-M como requisito.
+_Evitar_: Pasta global obrigatória ou dependência de pasta específica como requisito.
 
-**Inbox**: Papel de entrada de documentos a avaliar; nunca lixeira. Entrada
-compartilhada exige autorização específica e empresas atendidas declaradas.
+**Inbox**: Papel de entrada de documentos a avaliar; não implica descarte nem
+autoriza exclusão. Entrada compartilhada exige autorização específica e empresas
+atendidas declaradas.
 
 **Política de acesso**: Conjunto versionado de ações, alcance e limites de um local.
 
