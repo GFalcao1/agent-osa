@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
-from pydantic import PostgresDsn, SecretStr, model_validator
+from pydantic import Field, PostgresDsn, SecretStr, ValidationError, model_validator
+from pydantic_core import InitErrorDetails
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["development", "test", "production"]
@@ -31,33 +31,43 @@ class Settings(BaseSettings):
     email_provider: EmailProvider = "development"
     allow_external_llm: bool = False
 
-    database_url: PostgresDsn | None = None
-    inbox_root: Path | None = None
-    companies_root: Path | None = None
+    database_url: PostgresDsn | None = Field(default=None, repr=False)
+    # These fields exist only to reject retired settings explicitly. They must
+    # never authorize access to a document location.
+    inbox_root: str | None = None
+    companies_root: str | None = None
 
     smtp_host: str | None = None
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
 
+    def __init__(self, **values: Any) -> None:
+        """Validate settings without retaining raw inputs in error output."""
+        try:
+            super().__init__(**values)
+        except ValidationError as error:
+            raise ValidationError.from_exception_data(
+                self.__class__.__name__,
+                cast(list[InitErrorDetails], error.errors(include_input=False)),
+            ) from None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_document_roots(cls, values: object) -> object:
+        if isinstance(values, dict) and (
+            "inbox_root" in values or "companies_root" in values
+        ):
+            raise ValueError(
+                "legacy document-root configuration is not supported; "
+                "register authorized locations instead"
+            )
+        return values
+
     @model_validator(mode="after")
     def validate_mode_requirements(self) -> Settings:
-        has_document_roots = self.inbox_root is not None or self.companies_root is not None
-
-        if self.environment == "production" and not (
-            self.inbox_root is not None and self.companies_root is not None
-        ):
-            raise ValueError("production requires both document roots")
-
-        if self.environment == "test" and has_document_roots:
-            raise ValueError("test environment does not accept document roots")
 
         if self.enable_file_moves and self.dry_run:
             raise ValueError("enable_file_moves requires dry_run=false")
-
-        if self.enable_file_moves and not (
-            self.inbox_root is not None and self.companies_root is not None
-        ):
-            raise ValueError("enable_file_moves requires both document roots")
 
         if self.email_provider == "smtp" and not (
             self.smtp_host and self.smtp_username and self.smtp_password

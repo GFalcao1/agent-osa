@@ -22,6 +22,10 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+  "native: requires the target filesystem profile and is not part of the portable suite",
+  "live: requires an explicitly configured live provider and is not part of the portable suite",
+]
 
 [tool.ruff]
 target-version = "py312"
