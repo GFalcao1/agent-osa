@@ -1,21 +1,31 @@
-"""Closed vocabularies used to describe documents without inferring ownership."""
+"""Collection-specific vocabulary values; labels do not authorize file paths."""
 
 from __future__ import annotations
 
-from enum import StrEnum
+from dataclasses import dataclass
+from uuid import UUID
 
 
-class Department(StrEnum):
-    FISCAL = "Fiscal"
-    ACCOUNTING = "Contábil"
-    PERSONNEL = "Departamento Pessoal"
-    CORPORATE = "Societário"
+@dataclass(frozen=True, slots=True)
+class _CatalogEntry:
+    id: UUID
+    collection_id: UUID
+    name: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, UUID):
+            raise ValueError("id must be a UUID")
+        if not isinstance(self.collection_id, UUID):
+            raise ValueError("collection_id must be a UUID")
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("name must be nonempty text")
 
 
-class DocumentType(StrEnum):
-    CONTRACT_SOCIAL = "contract_social"
-    CONTRACT_AMENDMENT = "contract_amendment"
-    TAX_DOCUMENT = "tax_document"
-    ACCOUNTING_DOCUMENT = "accounting_document"
-    PAYROLL_DOCUMENT = "payroll_document"
-    OTHER = "other"
+@dataclass(frozen=True, slots=True)
+class Category(_CatalogEntry):
+    """A category belonging to a collection's configurable catalog."""
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentType(_CatalogEntry):
+    """A document classification, distinct from its physical file format."""

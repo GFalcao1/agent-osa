@@ -2,35 +2,65 @@
 
 **Organizator Sender Archver** — automação documental com IA, aprovação humana e rastreabilidade.
 
-O O.S.A. é um projeto de agente local para localizar, enviar e organizar documentos de empresas em pastas compartilhadas. A interação inicial será pelo Telegram, com interpretação de pedidos em linguagem natural e execução limitada por regras determinísticas.
+O O.S.A. é um projeto de organizador local de documentos e pastas para qualquer usuário, em uso pessoal ou compartilhado. Pode organizar documentos de empresas, arquivos pessoais, documentos de pacientes, materiais de estudo, projetos, imóveis e outros assuntos. A interação inicial será pelo Telegram, com interpretação de pedidos em linguagem natural e execução limitada por regras determinísticas.
 
 O projeto também tem um objetivo educacional: construir uma aplicação que seja possível estudar, explicar, modificar manualmente e evoluir com apoio de ferramentas de AI Coding.
 
 ## Estado atual
 
-O repositório contém o planejamento de **32 tasks** e os glossários da arquitetura proposta. A aplicação ainda não foi implementada e nenhum gate de implementação está aprovado.
+O repositório contém o planejamento de **32 tasks**, a base de configuração e valores iniciais de domínio. A TASK-001 foi aceita; os demais gates continuam pendentes. Os fluxos de organização ainda não estão implementados.
 
-As funcionalidades descritas neste README são o escopo previsto da primeira versão, não capacidades já disponíveis.
+As funcionalidades descritas são planejadas. O escopo geral do produto e o recorte inicial da V1 são diferenciados abaixo; não representam capacidades já disponíveis.
 
 ## O que o projeto pretende resolver
 
-### Organizar documentos de uma empresa
+### Organizar uma coleção de documentos
 
-Ao receber um pedido como “Organize os documentos da Empresa Alfa”, o sistema deverá identificar o usuário, verificar suas permissões, analisar documentos da pasta de entrada e propor destinos nas pastas da empresa.
+Ao receber um pedido como “Organize os documentos do Projeto Aurora”, o sistema deverá identificar o usuário, verificar suas permissões, analisar documentos da pasta de entrada e propor destinos nas pastas da coleção.
 
 O usuário revisará o plano antes de aprovar qualquer movimentação. Documentos ambíguos permanecerão na origem para revisão.
 
 ### Localizar e enviar documentos por e-mail
 
-Um pedido como “Envie o contrato social e a última alteração contratual da Empresa Alfa por e-mail” deverá localizar os arquivos, verificar pertencimento e versões, apresentar os anexos e o destinatário e solicitar confirmação antes do envio.
+Um pedido como “Envie o contrato e o relatório mais recente do Projeto Aurora por e-mail” deverá localizar os arquivos, verificar pertencimento e versões, apresentar os anexos e o destinatário e solicitar confirmação antes do envio.
 
 Documento não encontrado será informado como ausente. O modelo não deverá inventar arquivos ou presumir versões.
 
 ### Organizar um lote
 
-O sistema deverá analisar um conjunto definido de documentos, identificar empresa, tipo documental, departamento e competência quando aplicável, e apresentar um resumo com itens elegíveis e pendentes de revisão.
+O sistema deverá analisar um conjunto definido de documentos, identificar coleção, tipo documental, categoria e data/período quando aplicável, e apresentar um resumo com itens elegíveis e pendentes de revisão.
 
 Somente os itens aprovados poderão ser movimentados, com registro do resultado de cada operação.
+
+Uma **coleção documental** reúne arquivos de um contexto escolhido pelo usuário.
+“Empresa fictícia Alfa”, “Arquivo pessoal”, “Paciente fictício Alfa” e “Projeto
+Aurora” são exemplos. Empresas continuam incluídas; o produto não é exclusivo
+de um setor. CNPJ e outros identificadores podem ser referências do contexto
+correspondente, sem se tornarem requisitos para todos os usuários. Categorias e tipos
+são configuráveis por coleção. A pessoa ou assunto representado pela coleção não
+precisa ter conta no sistema; acesso depende das concessões do usuário.
+
+### Tipos, formatos e estruturas de organização
+
+O produto deve permitir diferentes tipos documentais, formatos de arquivo e
+estruturas de pastas, conforme a necessidade de cada usuário. Por exemplo:
+
+| Contexto | Documentos | Exemplo de organização |
+|---|---|---|
+| Empresa fictícia Alfa | Contratos, notas e relatórios | Por departamento, ano ou projeto |
+| Paciente fictício Beta | Exames e relatórios | Por paciente, atendimento ou data |
+| Arquivo pessoal | Recibos, comprovantes e fotografias | Por assunto, evento ou período |
+| Projeto Aurora | Especificações, planilhas e imagens | Por projeto, etapa ou tipo |
+
+Esses exemplos são combináveis e não impõem uma árvore única. Uma coleção é um
+agrupamento lógico; ela não exige uma pasta com o mesmo nome. A organização pode
+usar diretórios existentes e hierarquias configuradas em locais autorizados.
+
+PDFs, documentos de texto, planilhas e imagens fazem parte da direção do produto.
+Cada formato precisa de suporte explícito às operações aplicáveis antes de ser
+habilitado. **O recorte inicial planejado da V1 processa PDFs textuais e
+digitalizados**; os demais formatos ainda precisam de tasks de implementação e
+validação e permanecem preservados na origem enquanto não forem suportados.
 
 ## Princípios da solução
 
@@ -44,7 +74,7 @@ Somente os itens aprovados poderão ser movimentados, com registro do resultado 
 - **Código explicável:** responsabilidades claras, testes e documentação acompanhando a implementação.
 
 O planejamento prevê um painel web administrativo para cadastrar várias pastas
-por empresa, em discos ou compartilhamentos independentes. Cada local terá ações,
+por coleção, em discos ou compartilhamentos independentes. Cada local terá ações,
 alcance, limites e rotas de movimentação explícitos. O backend combina essas regras
 com as permissões do solicitante a cada acesso. Leitura não concede envio; cadastro
 não substitui aprovação de movimentações. Não há pasta global obrigatória.
