@@ -41,6 +41,30 @@ _Evitar_: inbox, entrada
 **Arquivo estável**:
 Arquivo da pasta monitorada cujo tamanho e mtime não mudaram por dois ciclos e que atingiu a idade mínima.
 
+**Painel**:
+Página web local de configuração (FastAPI + HTML) em `127.0.0.1:8765`. Sem autenticação própria na V1: só é alcançável na máquina (ADR-0005). Cadastra raízes, pastas monitoradas, template, donos, usuários e modelo; nunca cria o primeiro administrador.
+_Evitar_: dashboard, console, backoffice
+
+**Manual de uso**:
+Página de ajuda embutida no painel (`/manual`), em português simples, para quem opera o painel sem ser técnico: ordem de configuração, um capítulo por seção, glossário, problemas comuns, segurança e quando chamar o responsável técnico. Estática, sempre alcançável (também sem administrador e com cadastro vazio) e sem tocar o banco; cada página do painel tem um bloco "Como usar esta página" que leva ao capítulo certo. As frases de recusa que ela cita são conferidas por teste contra o código que as gera.
+_Evitar_: README do operador, tutorial, wiki
+
+**Bootstrap**:
+`osa admin bootstrap`: cria o primeiro e único administrador, antes de qualquer cadastro. Recusa se já existir um administrador, ativo ou não.
+
+**Cadastro**:
+O conjunto configurado pelo administrador (raízes, pastas monitoradas, departamentos, donos com aliases, usuários, modelo). O banco é a fonte de verdade; YAML é só export/import.
+_Evitar_: configuração (é o que vem do ambiente), seed
+
+**Import**:
+Carga de um YAML do cadastro num banco migrado com administrador já criado pelo bootstrap e cadastro vazio (sem raiz, departamento, dono, usuário não-admin nem configuração do modelo gravada). Não faz merge e nunca cria administrador.
+
+**Sonda de escrita**:
+Arquivo `.osa-probe-<uuid>` criado e removido pela aplicação ao cadastrar uma raiz, para provar que ela lista e escreve ali. Roda mesmo com efeitos de filesystem desligados; é a única exceção a "sem delete" e só toca o próprio arquivo. Roda só depois de recusadas raiz duplicada e aninhada; o evento `root.probe` fica gravado mesmo que o cadastro da raiz seja revertido.
+
+**Configuração do modelo**:
+Nome, digest e interruptor do provedor externo gravados no banco (linha única); gravar toma o mesmo lock do import, que nunca a sobrescreve. A chave do provedor externo nunca é gravada: vive só em `OSA_EXTERNAL_LLM_API_KEY`. O interruptor só vale com a chave presente.
+
 ### Carta e correio
 
 **Envelope**:
@@ -105,7 +129,7 @@ Posição do documento no índice: `DETECTADO`, `ESTAVEL`, `EXTRAIDO`, `CLASSIFI
 Como o documento entrou no índice: `telegram`, `watched` (pasta monitorada) ou `scan`.
 
 **Auditoria**:
-Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento.
+Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`). Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
 
 ## Tabelas
 
@@ -123,5 +147,6 @@ Nomes em inglês, colunas em português.
 | Arquivamento (operações, para desfazer) | `archive_operations` |
 | Revisão | `review_cases` |
 | Auditoria | `audit_events` |
+| Configuração do modelo (linha única) | `installation_settings` |
 
 Papéis: `admin`, `operator`, `reviewer`. Modos de arquivamento: `auto`, `review`, `undo`. Estados de revisão: `aberto`, `decidido`, `origem`.

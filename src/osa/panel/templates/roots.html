@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_ui.html" import badge, toggle, empty, help_block with context %}
+{% set section = "roots" %}
+{% block title %}Raízes{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Raízes e pastas monitoradas</h1></div>
+  <p class="lead">A raiz precisa existir, estar dentro de um ponto de montagem e aceitar escrita:
+    o painel lista a pasta e cria e apaga um arquivo <code>.osa-probe-*</code> próprio para provar.</p>
+</header>
+{% call help_block("raizes") %}Aqui você diz qual pasta compartilhada o agente pode usar. Essa pasta se chama raiz. Digite o endereço completo, começando com uma barra (/), e clique em Cadastrar raiz. O painel faz um teste de escrita: cria e apaga um arquivo pequeno na pasta.{% endcall %}
+<div class="split">
+{% if roots %}
+<div class="stack">
+  {% for root in roots %}
+  <section class="card root-card">
+    <div class="card-head">
+      <p class="root-path"><code>{{ root.caminho }}</code></p>
+      <div class="status">
+        {{ badge(root.ativo, "ativa", "inativa") }}
+        {% if bootstrapped %}{{ toggle("/roots/%d/ativo" % root.id, root.ativo) }}{% endif %}
+      </div>
+    </div>
+    {% if root.descricao %}<p class="muted">{{ root.descricao }}</p>{% endif %}
+    <div>
+      <p class="subhead">Pastas monitoradas</p>
+      {% set root_folders = folders.get(root.id, []) %}
+      {% if root_folders %}
+      <ul class="rows">
+        {% for folder in root_folders %}
+        <li>
+          <span class="name"><code>{{ folder.caminho }}</code> {{ badge(folder.ativo, "ativa", "inativa") }}</span>
+          {% if bootstrapped %}{{ toggle("/pastas/%d/ativo" % folder.id, folder.ativo) }}{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      {{ empty("Nenhuma pasta monitorada.", "", "folder", compact=true) }}
+      {% endif %}
+    </div>
+    {% if bootstrapped %}
+    <form class="inline-form" method="post" action="/roots/{{ root.id }}/pastas">
+      {% include "_csrf.html" %}
+      <label>Nova pasta monitorada (relativa à raiz)
+        <input type="text" name="caminho" required></label>
+      <button type="submit" class="btn">Adicionar</button>
+    </form>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<section class="card flush">
+  {{ empty("Nenhuma raiz cadastrada.", "Cadastre a pasta compartilhada que o agente vai usar." if bootstrapped else "", "folder") }}
+</section>
+{% endif %}
+{% if bootstrapped %}
+<form class="card aside" method="post" action="/roots">
+  {% include "_csrf.html" %}
+  <fieldset>
+    <legend>Nova raiz</legend>
+    <div class="form-grid">
+      <label>Caminho absoluto <input type="text" name="caminho" required></label>
+      <label>Descrição <input type="text" name="descricao"></label>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Cadastrar raiz</button></div>
+  </fieldset>
+</form>
+{% endif %}
+</div>
+{% endblock %}

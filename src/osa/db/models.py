@@ -213,6 +213,29 @@ class ReviewCase(Base):
     )
 
 
+class InstallationSettings(Base):
+    """Singleton row with the model choice and the external-provider toggle.
+
+    The external provider key is never stored: it lives only in OSA_EXTERNAL_LLM_API_KEY.
+    """
+
+    __tablename__ = "installation_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="singleton"),
+        CheckConstraint("length(btrim(modelo_nome)) > 0", name="modelo_nome_not_blank"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1, server_default=text("1"))
+    modelo_nome: Mapped[str] = mapped_column(Text)
+    modelo_digest: Mapped[str | None] = mapped_column(Text)
+    provedor_externo_ativo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class AuditEvent(Base):
     """Append-only: a trigger rejects UPDATE, DELETE and TRUNCATE (see migration 0001)."""
 

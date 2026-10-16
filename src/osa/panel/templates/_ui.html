@@ -1,0 +1,72 @@
+{# Shared pieces. Icons are inline SVG (no external reference): the CSP allows them. #}
+{% macro icon(name, extra="") -%}
+<svg class="icon{{ ' ' ~ extra if extra }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  {%- if name == "home" -%}
+  <path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1v-8Z"/>
+  {%- elif name == "drive" -%}
+  <rect x="3.5" y="4.5" width="17" height="6" rx="2"/><rect x="3.5" y="13.5" width="17" height="6" rx="2"/><path d="M7 7.5v.01M7 16.5v.01"/>
+  {%- elif name == "stack" -%}
+  <path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8 12 3.5Z"/><path d="m3.5 12 8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5"/>
+  {%- elif name == "building" -%}
+  <rect x="5" y="3.5" width="10" height="17" rx="1.5"/><path d="M15 9.5h3.5a1 1 0 0 1 1 1v10M8.5 8h3M8.5 12h3M8.5 16h3M3.5 20.5h17"/>
+  {%- elif name == "users" -%}
+  <circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.5-3.2 2.8-5 5.5-5s5 1.8 5.5 5"/><path d="M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.3c1.7.7 2.8 2.3 3 4.7"/>
+  {%- elif name == "chip" -%}
+  <rect x="6.5" y="6.5" width="11" height="11" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".8"/><path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3"/>
+  {%- elif name == "book" -%}
+  <path d="M12 6.6C10.2 5.2 7.8 4.5 4.5 4.5v13c3.3 0 5.7.7 7.5 2.1 1.8-1.4 4.2-2.1 7.5-2.1v-13c-3.3 0-5.7.7-7.5 2.1Z"/><path d="M12 6.6v13"/>
+  {%- elif name == "sun" -%}
+  <circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>
+  {%- elif name == "moon" -%}
+  <path d="M20 14.2A8 8 0 0 1 9.8 4a8 8 0 1 0 10.2 10.2Z"/>
+  {%- elif name == "alert" -%}
+  <path d="M12 3.2 2.9 18.8a1 1 0 0 0 .87 1.5h16.46a1 1 0 0 0 .87-1.5L12 3.2Z"/><path d="M12 9.5v4.6M12 17.2v.01"/>
+  {%- elif name == "info" -%}
+  <circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.9v.01"/>
+  {%- elif name == "lock" -%}
+  <rect x="5" y="11" width="14" height="9.5" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+  {%- elif name == "folder" -%}
+  <path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5V7Z"/>
+  {%- else -%}
+  <path d="m4 13 2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5Z"/><path d="M4 13h4.5l1 2.5h5l1-2.5H20"/>
+  {%- endif -%}
+</svg>
+{%- endmacro %}
+
+{% macro badge(on, on_label="ativo", off_label="inativo") -%}
+<span class="badge {{ 'badge-on' if on else 'badge-off' }}">{{ on_label if on else off_label }}</span>
+{%- endmacro %}
+
+{% macro toggle(action, active) -%}
+<form class="inline" method="post" action="{{ action }}">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="ativo" value="{{ 0 if active else 1 }}">
+  <button type="submit" class="btn btn-sm {{ 'btn-danger' if active }}">{{ "Desativar" if active else "Ativar" }}</button>
+</form>
+{%- endmacro %}
+
+{% macro empty(title, text, name="inbox", compact=false) -%}
+<div class="empty{{ ' compact' if compact }}">
+  {{ icon(name) }}
+  <strong>{{ title }}</strong>
+  {% if text %}<p>{{ text }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{# "Como usar esta página": plain-language help on every page, a CSS-only <details>.
+   `chapter` is the id of the matching chapter of /manual; the body is the macro's caller. #}
+{% macro help_block(chapter, errors=None) -%}
+<details class="help-block">
+  <summary>{{ icon("info") }}<span>Como usar esta página</span></summary>
+  <div class="help-body">
+    <p>{{ caller() }}</p>
+    <p class="help-links">
+      <a href="/manual#{{ chapter }}">Ler no manual</a>
+      <a href="/manual#{{ errors or chapter ~ '-erros' }}">Se aparecer um erro</a>
+      {%- if not bootstrapped %}
+      <a href="/manual#bloqueado">Não vê os formulários?</a>
+      {%- endif %}
+    </p>
+  </div>
+</details>
+{%- endmacro %}

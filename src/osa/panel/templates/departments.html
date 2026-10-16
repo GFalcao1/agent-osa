@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_ui.html" import badge, toggle, empty, help_block with context %}
+{% set section = "departments" %}
+{% block title %}Template{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Template de departamentos</h1></div>
+  <p class="lead">Lista ordenada, igual para todo dono. Renomear o departamento não renomeia
+    pastas existentes; mudar a pasta também não.</p>
+</header>
+{% call help_block("template") %}Esta lista define as pastas de departamento que todo dono vai ter. Adicione um departamento por vez; ele entra no fim da lista. Use Subir e Descer para ordenar e Desativar em vez de apagar. Mudar um nome de pasta aqui não renomeia pastas que já existem no servidor.{% endcall %}
+<section class="card flush">
+  {% if departments %}
+  <table class="stack-sm">
+    <thead>
+      <tr>
+        <th>#</th>
+        {% if bootstrapped %}<th colspan="3">Departamento</th>{% else %}<th>Departamento</th><th>Pasta</th><th>Ano</th>{% endif %}
+        <th>Situação</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for department in departments %}
+      <tr>
+        <td class="num" data-label="Ordem">{{ department.ordem }}</td>
+        {% if bootstrapped %}
+        <td class="cell-form" colspan="3">
+          <form method="post" action="/departments/{{ department.id }}">
+            {% include "_csrf.html" %}
+            <label>Nome <input type="text" name="nome" value="{{ department.nome }}" required></label>
+            <label>Pasta <input type="text" name="pasta" value="{{ department.pasta }}" required></label>
+            <label class="check"><input type="checkbox" name="usa_ano" {{ "checked" if department.usa_ano }}> Subpasta por ano</label>
+            <button type="submit" class="btn btn-sm">Salvar</button>
+          </form>
+        </td>
+        {% else %}
+        <td data-label="Departamento">{{ department.nome }}</td>
+        <td data-label="Pasta"><code>{{ department.pasta }}</code></td>
+        <td data-label="Ano">{{ "sim" if department.usa_ano else "não" }}</td>
+        {% endif %}
+        <td data-label="Situação">{{ badge(department.ativo) }}</td>
+        <td class="actions-cell" data-label="Ações">
+          {% if bootstrapped %}
+          <div class="actions">
+            {% for direction, label in (("up", "Subir"), ("down", "Descer")) %}
+            <form class="inline" method="post" action="/departments/{{ department.id }}/mover">
+              {% include "_csrf.html" %}
+              <input type="hidden" name="direcao" value="{{ direction }}">
+              <button type="submit" class="btn btn-sm">{{ label }}</button>
+            </form>
+            {% endfor %}
+            {{ toggle("/departments/%d/ativo" % department.id, department.ativo) }}
+          </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("Nenhum departamento cadastrado.", "Adicione o primeiro departamento; a lista vale para todo dono." if bootstrapped else "", "folder") }}
+  {% endif %}
+</section>
+{% if bootstrapped %}
+<form class="card" method="post" action="/departments">
+  {% include "_csrf.html" %}
+  <fieldset>
+    <legend>Novo departamento (entra no fim da lista)</legend>
+    <div class="form-grid fields-3">
+      <label>Nome <input type="text" name="nome" required></label>
+      <label>Pasta (vazio: derivada do nome) <input type="text" name="pasta"></label>
+      <label class="check"><input type="checkbox" name="usa_ano"> Subpasta por ano</label>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Adicionar departamento</button></div>
+  </fieldset>
+</form>
+{% endif %}
+{% endblock %}

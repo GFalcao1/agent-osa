@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_ui.html" import badge, toggle, empty, help_block with context %}
+{% set section = "users" %}
+{% block title %}Usuários{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Usuários (pessoas liberadas no Telegram)</h1></div>
+</header>
+{% call help_block("usuarios") %}Aqui ficam as pessoas liberadas para falar com o agente no Telegram. Cada pessoa precisa do número dela no Telegram e de um departamento. Administrador não é criado aqui. Para tirar alguém, use Desativar.{% endcall %}
+<section class="card flush">
+  {% if users %}
+  <table class="stack-sm">
+    <thead>
+      <tr><th>Telegram ID</th><th>Nome</th><th>Papel</th><th>Departamento</th><th>Situação</th></tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td data-label="Telegram ID">{{ user.telegram_id }}</td>
+        {% if user.papel == "admin" or not bootstrapped %}
+        <td data-label="Nome">{{ user.nome }}</td>
+        <td data-label="Papel"><span class="role">{{ user.papel }}</span></td>
+        <td data-label="Departamento">{{ department_names.get(user.departamento_id, "") }}</td>
+        {% else %}
+        <td class="cell-form" colspan="3">
+          <form method="post" action="/users/{{ user.id }}">
+            {% include "_csrf.html" %}
+            <label>Nome <input type="text" name="nome" value="{{ user.nome }}" required></label>
+            <label>Papel
+              <select name="papel">
+                {% for role in roles %}<option value="{{ role }}" {{ "selected" if role == user.papel }}>{{ role }}</option>{% endfor %}
+              </select></label>
+            <label>Departamento
+              <select name="departamento_id">
+                {% for department in all_departments if department.ativo or department.id == user.departamento_id %}<option value="{{ department.id }}" {{ "selected" if department.id == user.departamento_id }}>{{ department.nome }}{{ " (inativo)" if not department.ativo }}</option>{% endfor %}
+              </select></label>
+            <button type="submit" class="btn btn-sm">Salvar</button>
+          </form>
+        </td>
+        {% endif %}
+        <td data-label="Situação">
+          <div class="status">
+            {{ badge(user.ativo) }}
+            {% if bootstrapped %}{{ toggle("/users/%d/ativo" % user.id, user.ativo) }}{% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("Nenhum usuário cadastrado.", "Cadastre quem pode falar com o agente pelo Telegram." if bootstrapped else "") }}
+  {% endif %}
+</section>
+{% if bootstrapped %}
+<form class="card" method="post" action="/users">
+  {% include "_csrf.html" %}
+  <fieldset>
+    <legend>Novo usuário</legend>
+    <div class="form-grid fields-4">
+      <label>Telegram ID (número) <input type="text" name="telegram_id" inputmode="numeric" required></label>
+      <label>Nome <input type="text" name="nome" required></label>
+      <label>Papel
+        <select name="papel">{% for role in roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select></label>
+      <label>Departamento
+        <select name="departamento_id">{% for department in departments %}<option value="{{ department.id }}">{{ department.nome }}</option>{% endfor %}</select></label>
+      <p class="help wide">O administrador só é criado por <code>osa admin bootstrap</code>.</p>
+    </div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">Cadastrar usuário</button></div>
+  </fieldset>
+</form>
+{% endif %}
+{% endblock %}
