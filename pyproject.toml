@@ -9,8 +9,11 @@ description = "Agente local para organização e envio auditável de documentos.
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.13,<2",
+  "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.7,<3",
   "python-dotenv>=1.0,<2",
+  "sqlalchemy>=2.0,<2.2",
   "structlog>=25.1,<27",
   "typer>=0.15,<1",
 ]
@@ -27,8 +30,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not integration'"
 markers = [
+  "integration: requires a disposable PostgreSQL configured by OSA_TEST_DATABASE_URL; run with -m integration",
   "native: requires the target filesystem profile and is not part of the portable suite",
   "live: requires an explicitly configured live provider and is not part of the portable suite",
 ]

@@ -68,10 +68,10 @@ Rename inverso de um arquivamento registrado, dentro da mesma raiz, nunca apagan
 ### Pessoas
 
 **Administrador**:
-Usuário que configura a instalação, confirma dono novo e é o único que acessa classe sensível.
+Usuário que configura a instalação, confirma dono novo e é o único que acessa classe sensível. Único papel que pode não ter departamento.
 
 **Operador**:
-Usuário da allowlist que envia e pede documentos.
+Usuário da allowlist que envia e pede documentos. Sempre tem departamento.
 
 **Revisor**:
 Operador que recebe revisões do seu departamento.
@@ -97,3 +97,31 @@ Arquivo cujo sha256 já consta no índice; é informado, não arquivado de novo.
 
 **Scan**:
 Leitura das raízes para alimentar o índice com o que já está na árvore, sem mover nada.
+
+**Estado**:
+Posição do documento no índice: `DETECTADO`, `ESTAVEL`, `EXTRAIDO`, `CLASSIFICADO`, `ARQUIVADO`, `EM_REVISAO`, `NA_ORIGEM`, `NAO_SUPORTADO`, `FALHOU`. As transições são regra do correio, não do banco.
+
+**Origem**:
+Como o documento entrou no índice: `telegram`, `watched` (pasta monitorada) ou `scan`.
+
+**Auditoria**:
+Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento.
+
+## Tabelas
+
+Nomes em inglês, colunas em português.
+
+| Conceito | Tabela |
+|---|---|
+| Usuário (allowlist, papel) | `users` |
+| Dono | `owners` |
+| Alias | `owner_aliases` |
+| Departamento (template) | `departments` |
+| Raiz | `roots` |
+| Pasta monitorada | `watched_folders` |
+| Índice | `documents` |
+| Arquivamento (operações, para desfazer) | `archive_operations` |
+| Revisão | `review_cases` |
+| Auditoria | `audit_events` |
+
+Papéis: `admin`, `operator`, `reviewer`. Modos de arquivamento: `auto`, `review`, `undo`. Estados de revisão: `aberto`, `decidido`, `origem`.
