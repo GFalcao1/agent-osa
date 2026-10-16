@@ -10,7 +10,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "pydantic-settings>=2.7,<3",
+  "python-dotenv>=1.0,<2",
+  "structlog>=25.1,<27",
+  "typer>=0.15,<1",
 ]
+
+[project.scripts]
+osa = "osa.cli:main"
 
 [dependency-groups]
 dev = [
