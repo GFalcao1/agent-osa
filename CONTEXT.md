@@ -1,49 +1,99 @@
 # Agent O.S.A. — vocabulário
 
-Organização de documentos e pastas para uso pessoal ou compartilhado, em qualquer contexto.
+Arquivamento e consulta de documentos de uma empresa numa árvore padronizada de
+pastas, por Telegram, com o modelo escrevendo o envelope e código fazendo a entrega.
 
 ## Linguagem
 
-**Coleção documental**: Agrupamento de documentos com identidade própria e acesso
-controlado; pode representar uma empresa, pessoa, paciente, projeto, imóvel, assunto ou
-arquivo pessoal. Pode possuir vários locais autorizados.
-_Evitar_: Confundir coleção com pasta física ou com conta de usuário.
+### Organização
 
-**Identidade da coleção**: Identificador estável que distingue coleções mesmo
-quando seus nomes coincidem. Nome, alias e nome de pasta não comprovam pertencimento.
+**Instalação**:
+Uma implantação do agente para uma empresa: um bot, um banco, um conjunto de raízes.
+_Evitar_: tenant, cliente (ambíguo com dono)
 
-**Referência externa**: Código opcional de um cadastro ou documento, interpretado
-no contexto de sua origem e papel, como CNPJ para uma empresa ou código de projeto. Não é requisito para criar uma coleção e não
-substitui sua identidade nem comprova sozinho o pertencimento documental.
+**Dono**:
+Pessoa jurídica ou física a quem um documento pertence; tem uma árvore própria dentro de cada raiz.
+_Evitar_: coleção, empresa (é só um tipo de dono), cliente
 
-**Categoria**: Divisão configurável de uma coleção, como Saúde, Estudos, Contratos
-ou Fotografias. Seu nome não concede acesso nem constitui um caminho autorizado.
+**Alias**:
+Nome alternativo cadastrado de um dono (fantasia, razão social, abreviação) que resolve para o mesmo dono.
 
-**Estrutura de organização**: Disposição configurada de pastas por critérios
-como assunto, departamento, pessoa, projeto, data ou tipo, inclusive combinações.
-Uma coleção não impõe uma árvore física única.
+**Evidência de dono**:
+CNPJ ou alias do cadastro encontrado por busca exata no texto do documento, ou dono declarado pelo operador. Única base aceita para arquivamento automático.
+_Evitar_: dono inferido pelo modelo
 
-**Formato de arquivo**: Representação técnica de um arquivo, como PDF, DOCX, XLSX
-ou PNG, distinta de seu tipo documental e da estrutura de pastas.
+**Departamento**:
+Nível fixo abaixo do dono na árvore, definido pelo template da instalação; também o setor de um usuário.
+_Evitar_: categoria, setor (para a pasta), subpasta
 
-**Tipo documental**: Classificação cadastrada para uma coleção, como exame,
-relatório ou recibo, independente do formato do arquivo.
+**Template**:
+Lista ordenada de departamentos da instalação, com placeholder de ano opcional, aplicada igual a todo dono.
+_Evitar_: estrutura padrão, árvore
 
-**Local autorizado**: Pasta cadastrada com identidade estável, coleção associada
-ou papel explícito de entrada compartilhada, e alcance definido.
-_Evitar_: Pasta global obrigatória ou dependência de pasta específica como requisito.
+**Raiz**:
+Pasta do share cadastrada como limite de toda operação; nenhuma leitura ou escrita acontece fora dela.
+_Evitar_: local autorizado, root, pasta global
 
-**Inbox**: Papel de entrada de documentos a avaliar; não implica descarte nem
-autoriza exclusão. Entrada compartilhada exige autorização específica e coleções
-atendidas declaradas.
+**Pasta monitorada**:
+Pasta dentro de uma raiz onde arquivos aparecem sem dono declarado e o worker os processa quando estáveis.
+_Evitar_: inbox, entrada
 
-**Política de acesso**: Conjunto versionado de ações, alcance e limites de um local.
+**Arquivo estável**:
+Arquivo da pasta monitorada cujo tamanho e mtime não mudaram por dois ciclos e que atingiu a idade mínima.
 
-**Permissão efetiva**: Ações admitidas simultaneamente para o usuário, a coleção,
-o local e os limites operacionais. Ausência de concessão significa recusa.
+### Carta e correio
 
-**Rota de movimentação**: Relação explícita entre local de origem e destino
-permitido para uma coleção; não é aprovação de uma movimentação concreta.
+**Envelope**:
+JSON validado por schema que o modelo devolve: classificação de um documento ou interpretação de um pedido. Nunca contém dono.
+_Evitar_: resposta do modelo, output
 
-**Aprovação**: Autorização humana de plano ou manifesto específico, vinculada a
-itens, versão, políticas, modo e validade. Não amplia permissões.
+**Correio**:
+Código determinístico que confere evidência de dono, template e raiz, e executa o arquivamento.
+_Evitar_: executor, agente
+
+**Arquivamento**:
+Rename de um arquivo para a pasta de destino dentro da mesma raiz, com sufixo em colisão e sem sobrescrita.
+_Evitar_: mover, organizar, upload
+
+**Arquivamento automático**:
+Arquivamento sem humano, permitido só com evidência de dono e envelope sem reserva.
+
+**Revisão**:
+Caso que o correio não arquivou sozinho, entregue ao revisor com botões para decidir dono, departamento ou deixar na origem.
+_Evitar_: aprovação, plano
+
+**Desfazer**:
+Rename inverso de um arquivamento registrado, dentro da mesma raiz, nunca apagando.
+
+### Pessoas
+
+**Administrador**:
+Usuário que configura a instalação, confirma dono novo e é o único que acessa classe sensível.
+
+**Operador**:
+Usuário da allowlist que envia e pede documentos.
+
+**Revisor**:
+Operador que recebe revisões do seu departamento.
+
+**Allowlist**:
+Lista de IDs do Telegram cadastrados; qualquer outro ID é ignorado.
+
+### Documentos
+
+**Classe sensível**:
+Arquivo de certificado digital ou chave privada, identificado por extensão: nunca extraído, nunca enviado ao modelo nem pelo Telegram.
+_Evitar_: certificado (ambíguo com certidão em PDF)
+
+**Não suportado**:
+Formato sem extração implementada; fica na origem e gera aviso.
+
+**Índice**:
+Registro em banco de cada documento conhecido: hash, caminho, dono, departamento, metadados do envelope, texto extraído e estado.
+_Evitar_: banco de hashes, catálogo
+
+**Duplicata**:
+Arquivo cujo sha256 já consta no índice; é informado, não arquivado de novo.
+
+**Scan**:
+Leitura das raízes para alimentar o índice com o que já está na árvore, sem mover nada.

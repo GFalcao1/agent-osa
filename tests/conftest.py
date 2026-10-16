@@ -24,4 +24,5 @@ def isolate_osa_environment(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
     monkeypatch.setattr(socket, "create_connection", reject_network)
     monkeypatch.setattr(socket.socket, "connect", reject_network)
+    monkeypatch.setattr(socket, "getaddrinfo", reject_network)
     yield
