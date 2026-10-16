@@ -28,6 +28,11 @@ MIGRATION_0001 = (
     Path(__file__).resolve().parents[2] / "src/osa/db/migrations/versions/0001_v1_schema.py"
 )
 
+MIGRATION_0002 = (
+    Path(__file__).resolve().parents[2]
+    / "src/osa/db/migrations/versions/0002_installation_settings.py"
+)
+
 FICTIONAL_PASSWORD = "fictional-pw-123"
 URL = f"postgresql://osa:{FICTIONAL_PASSWORD}@db.example.invalid:5432/osa_fictional"
 
@@ -137,22 +142,31 @@ def test_portable_tests_keep_python_sockets_blocked() -> None:
 # --- migration 0001, rendered offline (no database, no env.py) ---------------------
 
 
-def _load_0001() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("migration_0001", MIGRATION_0001)
+def _load_migration(path: Path, name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
+def _load_0001() -> ModuleType:
+    return _load_migration(MIGRATION_0001, "migration_0001")
+
+
+def _load_0002() -> ModuleType:
+    return _load_migration(MIGRATION_0002, "migration_0002")
+
+
 def _migration_ddl() -> str:
-    """DDL of 0001 with a bare context: no target_metadata, so no naming convention."""
+    """DDL of 0001 and 0002 with a bare context: no target_metadata, no naming convention."""
     buffer = io.StringIO()
     context = MigrationContext.configure(
         dialect_name="postgresql", opts={"as_sql": True, "output_buffer": buffer}
     )
     with Operations.context(context):
         _load_0001().upgrade()
+        _load_0002().upgrade()
     return buffer.getvalue()
 
 
@@ -183,7 +197,7 @@ def test_migration_names_every_constraint_without_env_naming_convention() -> Non
 
 
 def test_migration_constraints_and_indexes_match_models() -> None:
-    """Names, CHECK expressions and indexes of 0001 equal what the models declare."""
+    """Names, CHECK expressions and indexes of 0001 + 0002 equal what the models declare."""
     assert _clauses(_migration_ddl()) == _clauses(_models_ddl())
 
 

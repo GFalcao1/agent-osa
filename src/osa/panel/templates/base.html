@@ -1,0 +1,61 @@
+{% from "_ui.html" import icon with context -%}
+{% set nav = [("index", "/", "Início", "home"), ("roots", "/roots", "Raízes", "drive"), ("departments", "/departments", "Template", "stack"), ("owners", "/owners", "Donos", "building"), ("users", "/users", "Usuários", "users"), ("model", "/model", "Modelo", "chip"), ("manual", "/manual", "Manual", "book")] -%}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Painel{% endblock %} — Agent O.S.A.</title>
+  <link rel="stylesheet" href="/panel.css">
+  <script src="/theme.js"></script>
+</head>
+<body>
+<a class="skip" href="#conteudo">Pular para o conteúdo</a>
+<div class="shell">
+<header class="sidebar">
+  <a class="brand" href="/">
+    <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path class="shield-fill shield-line" d="M16 2.5 5 6.5v8.2c0 6.6 4.5 11.6 11 14.8 6.5-3.2 11-8.2 11-14.8V6.5L16 2.5Z" stroke-width="1"/>
+      <path class="shield-cross" d="M16 8v13M11.5 12.5h9" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+      <path class="shield-drop" d="M16 24.2 13.6 21h4.8L16 24.2Z"/>
+    </svg>
+    <span class="brand-text"><span class="brand-name">Agent O.S.A.</span><span class="brand-sub">Painel local</span></span>
+  </a>
+  <nav class="nav" aria-label="Seções do painel">
+    {% for key, href, label, glyph in nav %}
+    <a href="{{ href }}"{% if loop.last %} class="nav-help"{% endif %}{% if key == section %} aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
+    {% endfor %}
+  </nav>
+  <div class="side-foot">
+    <span class="side-label">Tema</span>
+    <button type="button" class="theme-switch" aria-pressed="false" aria-label="Alternar tema claro/escuro" title="Alternar tema claro/escuro">
+      <span class="knob" aria-hidden="true"></span>
+      {{ icon("sun", "sun") }}{{ icon("moon", "moon") }}
+    </button>
+  </div>
+</header>
+<div class="page">
+<main id="conteudo">
+  {% if not bootstrapped %}
+  <div class="alert alert-blocked" role="status">
+    {{ icon("lock") }}
+    <div>
+      <strong class="alert-title">Cadastro bloqueado</strong>
+      <p>Nenhum administrador cadastrado. Rode <code>osa admin bootstrap</code>
+        no terminal; o painel não altera nada até lá e nunca cria administrador.</p>
+    </div>
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="alert alert-error" role="alert">{{ icon("alert") }}<p>{{ error }}</p></div>
+  {% endif %}
+  {% if notice %}
+  <div class="alert alert-info" role="status">{{ icon("info") }}<p>{{ notice }}</p></div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="footer">Painel local &middot; 127.0.0.1</footer>
+</div>
+</div>
+</body>
+</html>

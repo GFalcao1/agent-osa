@@ -1,0 +1,581 @@
+{% extends "base.html" %}
+{% from "_ui.html" import icon %}
+{% set section = "manual" %}
+{% block title %}Manual de uso{% endblock %}
+
+{# ---- pieces used only by this page ---- #}
+{% macro toc_list() -%}
+<ol class="toc-list">
+  {% for chapter in chapters %}
+  <li><a href="#{{ chapter.id }}">{{ chapter.title }}</a></li>
+  {% endfor %}
+</ol>
+{%- endmacro %}
+
+{% macro chapter_head(key, lead) -%}
+{% for chapter in chapters if chapter.id == key %}
+<header class="chapter-head">
+  <span class="chapter-num" aria-hidden="true"></span>
+  <div>
+    <h2>{{ chapter.title }}</h2>
+    <p class="chapter-lead">{{ lead }}</p>
+  </div>
+</header>
+{% endfor %}
+{%- endmacro %}
+
+{% macro tip(title="Dica") -%}
+<aside class="callout callout-tip">
+  {{ icon("info") }}
+  <div><strong class="callout-title">{{ title }}</strong>{{ caller() }}</div>
+</aside>
+{%- endmacro %}
+
+{% macro warn(title="Atenção") -%}
+<aside class="callout callout-warn">
+  {{ icon("alert") }}
+  <div><strong class="callout-title">{{ title }}</strong>{{ caller() }}</div>
+</aside>
+{%- endmacro %}
+
+{% macro term(key, text) -%}
+<a class="term" href="#g-{{ key }}">{{ text }}</a>
+{%- endmacro %}
+
+{% macro back_top() -%}
+<p class="back-top-row"><a class="back-top" href="#topo">&uarr; Voltar ao topo</a></p>
+{%- endmacro %}
+
+{% macro problem_list(key) -%}
+<div class="problems">
+  {% for problem in problems[key] %}
+  <article class="problem problem-{{ problem.kind }}"{% if problem.anchor %} id="{{ problem.anchor }}"{% endif %}>
+    <p class="problem-msg"><span class="problem-tag">{{ "Aviso na tela" if problem.kind == "aviso" else "Frase na tela" }}</span><code>{{ problem.message }}</code></p>
+    <p><strong>O que significa:</strong> {{ problem.meaning }}</p>
+    <p><strong>O que fazer:</strong> {{ problem.action }}</p>
+  </article>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro situation(anchor, title) -%}
+<article class="problem problem-situacao" id="{{ anchor }}">
+  <p class="problem-msg"><span class="problem-tag problem-tag-situacao">Situação</span><strong>{{ title }}</strong></p>
+  {{ caller() }}
+</article>
+{%- endmacro %}
+
+{% block content %}
+<header class="page-head" id="topo">
+  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Manual de uso</h1></div>
+  <p class="lead">Um guia para quem vai usar o painel no dia a dia. Não precisa saber de informática: cada capítulo diz o que fazer, passo a passo, e o que fazer quando algo dá errado.</p>
+</header>
+
+<div class="manual">
+  <nav class="manual-toc manual-toc-wide" aria-label="Neste manual">
+    <p class="toc-title">Neste manual</p>
+    {{ toc_list() }}
+  </nav>
+  <details class="manual-toc manual-toc-narrow">
+    <summary>{{ icon("book") }}<span>Neste manual</span></summary>
+    <nav aria-label="Neste manual">{{ toc_list() }}</nav>
+  </details>
+
+  <div class="manual-body">
+
+    {# ================= 1. COMECE POR AQUI ================= #}
+    <section class="card chapter" id="comece">
+      {{ chapter_head("comece", "Para que serve o painel e por onde começar.") }}
+      <div class="prose">
+        <h3 id="comece-para-que">Para que serve o painel</h3>
+        <p>Este painel prepara o agente. Aqui você diz onde ficam os arquivos da empresa, como as pastas são organizadas e quem pode usar.</p>
+        <p>Enviar e pedir documentos não é aqui. Isso vai ser feito pelo Telegram.</p>
+        {% call warn("Nesta versão") %}<p>Nesta versão, o painel só guarda o cadastro. O envio pelo Telegram, a pasta monitorada e o reconhecimento dos donos pelo agente ainda não funcionam. Eles virão nas próximas versões, quando o responsável técnico ligar o agente.</p>{% endcall %}
+        <p>Palavra desconhecida? As palavras sublinhadas levam direto à explicação. Todas estão no capítulo <a href="#palavras">Palavras que você vai encontrar</a>.</p>
+
+        <h3 id="comece-passos">A ordem recomendada</h3>
+        <p>Siga estes passos na primeira vez. Cada um depende do anterior.</p>
+        <ol class="steps">
+          <li>
+            <span class="step-title">Raízes <a class="step-link" href="/roots">Abrir Raízes</a></span>
+            Diga ao painel qual pasta compartilhada o agente pode usar. Sem uma {{ term("raiz", "raiz") }}, o agente não tem onde guardar nada. <a href="#raizes">Ler o capítulo Raízes</a>.
+          </li>
+          <li>
+            <span class="step-title">Template de departamentos <a class="step-link" href="/departments">Abrir Template</a></span>
+            Monte a lista de departamentos, como Financeiro e Fiscal. Todo {{ term("dono", "dono") }} terá essas mesmas pastas. <a href="#template">Ler o capítulo Template</a>.
+          </li>
+          <li>
+            <span class="step-title">Donos <a class="step-link" href="/owners">Abrir Donos</a></span>
+            Cadastre as empresas ou pessoas a quem os documentos pertencem. <a href="#donos">Ler o capítulo Donos</a>.
+          </li>
+          <li>
+            <span class="step-title">Usuários <a class="step-link" href="/users">Abrir Usuários</a></span>
+            Cadastre quem pode falar com o agente. Cada pessoa precisa de um departamento, por isso o Template vem antes. <a href="#usuarios">Ler o capítulo Usuários</a>.
+          </li>
+          <li>
+            <span class="step-title">Modelo <a class="step-link" href="/model">Abrir Modelo</a></span>
+            Confira o modelo de inteligência artificial. Normalmente já vem pronto. Deixe o provedor externo desligado, a menos que o responsável técnico peça. <a href="#modelo">Ler o capítulo Modelo</a>.
+          </li>
+        </ol>
+
+        <h3 id="comece-configurar">O que quer dizer “configurar”</h3>
+        <p>Configurar é preencher essas telas uma vez. Depois você só ajusta quando algo muda.</p>
+        <ul>
+          <li>Chegou um cliente novo? Cadastre um dono.</li>
+          <li>Entrou alguém na equipe? Cadastre um usuário.</li>
+          <li>Surgiu um departamento novo? Adicione no Template.</li>
+        </ul>
+
+        <h3 id="comece-antes">Antes de começar</h3>
+        <ul>
+          <li>Abra o painel no computador onde ele roda, pelo endereço <code>http://127.0.0.1:8765</code>.</li>
+          <li>Se aparecer a caixa “Cadastro bloqueado”, o primeiro administrador ainda não existe. Veja o <a href="#bloqueado">capítulo de problemas</a>.</li>
+          <li>Deixe a pasta compartilhada da empresa conectada neste computador (ela aparece no Finder).</li>
+        </ul>
+
+        <h3 id="comece-salva">Como o painel salva</h3>
+        <ul>
+          <li><strong>Salva na hora.</strong> Cada formulário tem o seu próprio botão, como “Cadastrar”, “Salvar” ou “Adicionar”. Não existe um botão “salvar tudo”.</li>
+          <li><strong>Deu certo?</strong> A página recarrega e o item aparece na lista. Não há mensagem de “salvo”.</li>
+          <li><strong>Deu errado?</strong> Aparece uma caixa vermelha no alto, com o motivo. Nada foi salvo.</li>
+          <li><strong>Quase nada se apaga.</strong> Você desativa. O item inativo fica guardado e pode ser ativado de novo.</li>
+        </ul>
+        {% call tip("Exceção") %}<p>Um botão “Remover” de nome alternativo apaga de verdade. Mas você pode cadastrar o nome de novo. Os nomes que vêm do nome fantasia e da razão social voltam sozinhos quando você salva o dono.</p>{% endcall %}
+
+        <h3 id="comece-auditoria">Tudo fica registrado</h3>
+        <p>Toda mudança entra na {{ term("auditoria", "auditoria") }}: o que mudou, em que dia e a que horas. Esse registro não pode ser editado nem apagado.</p>
+        <p>O painel não tem senha, então o registro só diz que a mudança foi feita pelo painel. Ele não diz qual pessoa foi. O painel ainda não tem uma tela para ler o registro. Quem consulta é o responsável técnico.</p>
+
+        <h3 id="comece-ajuda">Ajuda em cada página</h3>
+        <p>Cada página do painel tem, no alto, uma caixa chamada “Como usar esta página”. Clique nela para abrir um resumo e um link para o capítulo certo deste manual.</p>
+        <p>O botão de sol e lua, na lateral ou no topo, troca entre o tema claro e o escuro.</p>
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 2. RAIZES ================= #}
+    <section class="card chapter" id="raizes">
+      {{ chapter_head("raizes", "A pasta principal onde ficam os documentos, e as pastas que o agente vigia.") }}
+      <div class="prose">
+        <h3 id="raizes-para-que">Para que serve</h3>
+        <p>A {{ term("raiz", "raiz") }} é a pasta principal dos documentos da empresa. Quase sempre é uma pasta compartilhada do servidor de arquivos.</p>
+        <p>O agente só lê e grava dentro das raízes cadastradas. Nada fora delas é tocado.</p>
+        <p>A {{ term("pasta-monitorada", "pasta monitorada") }} é uma subpasta da raiz onde as pessoas deixam arquivos soltos, sem dizer de quem são. O agente vai olhar essa pasta e cuidar dos arquivos que já terminaram de ser copiados.</p>
+        {% call tip("Nesta versão") %}<p>Nesta versão, o painel só guarda as raízes e as pastas monitoradas. O agente ainda não olha a pasta monitorada: isso virá numa próxima versão.</p>{% endcall %}
+
+        <h3 id="raizes-passos">Passo a passo</h3>
+        <ol class="steps">
+          <li>
+            <span class="step-title">Conecte a pasta compartilhada neste computador</span>
+            Abra o Finder e conecte o servidor de arquivos da empresa. Se não souber como, peça ao responsável técnico.
+          </li>
+          <li>
+            <span class="step-title">Digite o endereço em “Caminho absoluto”</span>
+            O endereço começa com uma barra (/). Pastas compartilhadas conectadas normalmente ficam dentro de <code>/Volumes</code>.
+            <span class="example"><strong>Exemplo:</strong> <code>/Volumes/ArquivosDaEmpresa/Documentos</code></span>
+          </li>
+          <li>
+            <span class="step-title">Escreva uma descrição (opcional)</span>
+            É só um lembrete para você, com até 500 letras.
+            <span class="example"><strong>Exemplo:</strong> Documentos da empresa</span>
+          </li>
+          <li>
+            <span class="step-title">Clique em “<strong>Cadastrar raiz</strong>”</span>
+            O painel confere o endereço e faz o teste de escrita. Se tudo estiver certo, a raiz aparece na lista como “ativa”.
+          </li>
+          <li>
+            <span class="step-title">Cadastre as pastas monitoradas, se for usar</span>
+            No cartão da raiz, escreva o nome da pasta em “<strong>Nova pasta monitorada</strong>” e clique em “Adicionar”. Escreva só o trecho depois da raiz, sem barra no início nem no fim, e sem barra invertida (\).
+            <span class="example"><strong>Exemplo:</strong> <code>Entrada</code> ou <code>Entrada/Novos</code></span>
+          </li>
+          <li>
+            <span class="step-title">Para parar de usar, clique em “<strong>Desativar</strong>”</span>
+            A raiz ou a pasta fica “inativa”. Nada é apagado nem movido no servidor. Para voltar a usar, clique em “<strong>Ativar</strong>”.
+          </li>
+        </ol>
+        {% call warn("Atenção: o teste de escrita") %}
+        <p>Ao cadastrar uma raiz, o painel cria dentro dela um arquivo minúsculo chamado <code>.osa-probe-</code> seguido de letras e números. Ele é apagado na hora.</p>
+        <p>É só para provar que o agente consegue gravar ali. Não é um documento seu. Se um dia sobrar um arquivo com esse nome, ele é só do teste.</p>
+        {% endcall %}
+
+        <h3 id="raizes-dicas">Dicas</h3>
+        <ul>
+          <li>Use poucas raízes. O agente nunca move um arquivo de uma raiz para outra.</li>
+          <li>Uma raiz não pode ficar dentro de outra, nem conter outra.</li>
+          <li>Maiúsculas e minúsculas não mudam o endereço. <code>/Volumes/Arquivos</code> e <code>/Volumes/arquivos</code> contam como a mesma pasta.</li>
+          <li>A pasta monitorada precisa existir antes. O painel não cria pastas.</li>
+          <li>Copie o endereço da pasta direto do Finder para não errar uma letra.</li>
+          <li>Confira o endereço antes de clicar em “Cadastrar raiz”. O endereço de uma raiz não pode ser editado nem apagado.</li>
+          <li>Se salvou uma raiz errada, clique em “Desativar” nela. Uma raiz desativada continua contando: se a certa ficar dentro dela, ou ao contrário, o painel não aceita a certa. Nesse caso, chame o responsável técnico.</li>
+        </ul>
+
+        <h3 id="raizes-erros">O que pode dar errado e o que fazer</h3>
+        <p>A frase em vermelho aparece no alto da página. Procure-a abaixo.</p>
+        {{ problem_list("raizes") }}
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 3. TEMPLATE ================= #}
+    <section class="card chapter" id="template">
+      {{ chapter_head("template", "A lista de departamentos, igual para todo dono.") }}
+      <div class="prose">
+        <h3 id="template-para-que">Para que serve</h3>
+        <p>O {{ term("template", "template") }} é a lista de {{ term("departamento", "departamentos") }} da empresa, como Financeiro, Fiscal e Pessoal.</p>
+        <p>Todo dono recebe essa mesma lista de pastas. Departamento também é o setor de cada pessoa cadastrada em Usuários.</p>
+        <figure class="tree-figure">
+        <figcaption>Exemplo de como as pastas ficam organizadas:</figcaption>
+        <pre class="tree">Raiz (ArquivosDaEmpresa)
+└─ Alfa Comércio        pasta do dono
+   ├─ Financeiro        pasta do departamento
+   │  └─ 2026           subpasta por ano (se marcada)
+   └─ Fiscal</pre>
+        </figure>
+
+        <h3 id="template-passos">Passo a passo</h3>
+        <ol class="steps">
+          <li>
+            <span class="step-title">Escreva o nome em “Nome”</span>
+            É o nome que as pessoas reconhecem. É obrigatório.
+            <span class="example"><strong>Exemplo:</strong> Financeiro</span>
+          </li>
+          <li>
+            <span class="step-title">Escolha o nome da “Pasta”</span>
+            Se deixar vazio, o painel cria o nome da pasta a partir do nome do departamento. Se preferir, escreva o nome exato que quer no servidor.
+            <span class="example"><strong>Exemplo:</strong> <code>01 Financeiro</code></span>
+          </li>
+          <li>
+            <span class="step-title">Marque “<strong>Subpasta por ano</strong>” se quiser separar por ano</span>
+            Com a caixa marcada, dentro da pasta do departamento haverá uma subpasta para cada ano, como <code>2026</code>. Marque para departamentos com muitos papéis por ano, como o Fiscal.
+          </li>
+          <li>
+            <span class="step-title">Clique em “<strong>Adicionar departamento</strong>”</span>
+            O novo departamento entra no fim da lista.
+          </li>
+          <li>
+            <span class="step-title">Arrume a ordem com “<strong>Subir</strong>” e “<strong>Descer</strong>”</span>
+            Cada clique move o departamento uma posição. A ordem não muda nenhuma pasta.
+          </li>
+          <li>
+            <span class="step-title">Para corrigir, mude os campos da linha e clique em “Salvar”</span>
+            Você pode mudar o nome, a pasta e a caixa do ano.
+          </li>
+          <li>
+            <span class="step-title">Para tirar da lista, clique em “<strong>Desativar</strong>”</span>
+            O departamento fica “inativo”. Ele não é apagado. Não dá para escolher um departamento inativo para uma pessoa nova.
+          </li>
+        </ol>
+        {% call warn("Atenção: renomear não renomeia as pastas") %}
+        <p>Se você mudar o nome da pasta de um departamento, as pastas que já existem no servidor continuam com o nome antigo. O painel mostra um aviso azul.</p>
+        <p>Mudar só o nome do departamento, sem mexer na pasta, não mostra esse aviso.</p>
+        {% endcall %}
+
+        <h3 id="template-dicas">Dicas</h3>
+        <ul>
+          <li>Pense bem nos nomes das pastas antes de ter muitos documentos. Mudar depois dá trabalho.</li>
+          <li>Nomes curtos e claros funcionam melhor.</li>
+          <li>Não pode haver dois departamentos com o mesmo nome, nem com o mesmo nome de pasta. Maiúsculas e minúsculas não diferenciam.</li>
+          <li>Desativar não libera o nome nem a pasta: um departamento inativo continua ocupando os dois. Se é o mesmo departamento de antes, ative o antigo de novo. Se não, use outro nome.</li>
+          <li>O nome da pasta não pode ter estes sinais: <code>&lt; &gt; : " | ? * / \</code>.</li>
+          <li>O nome da pasta não pode começar nem terminar com ponto ou espaço, e não pode ter mais de 200 letras.</li>
+          <li>Nomes como CON, PRN, AUX, NUL, COM1 e LPT1 são reservados pelo servidor de arquivos.</li>
+        </ul>
+
+        <h3 id="template-erros">O que pode dar errado e o que fazer</h3>
+        {{ problem_list("template") }}
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 4. DONOS ================= #}
+    <section class="card chapter" id="donos">
+      {{ chapter_head("donos", "As empresas ou pessoas a quem os documentos pertencem.") }}
+      <div class="prose">
+        <h3 id="donos-para-que">Para que serve</h3>
+        <p>O {{ term("dono", "dono") }} é a empresa ou a pessoa a quem um documento pertence. Cada dono tem a sua própria árvore de pastas.</p>
+        <p>É com o CNPJ e os {{ term("nome-alternativo", "nomes alternativos") }} que o agente vai reconhecer de quem é um documento. Ele também vai aceitar o dono dito por quem envia.</p>
+        {% call tip("Nesta versão") %}<p>Nesta versão, o painel só guarda os donos. O agente ainda não reconhece documentos: isso virá numa próxima versão.</p>{% endcall %}
+        {% call tip("O que o painel faz aqui") %}<p>Cadastrar um dono só guarda os dados. Este painel não cria nem move pastas.</p>{% endcall %}
+
+        <h3 id="donos-passos">Passo a passo</h3>
+        <ol class="steps">
+          <li>
+            <span class="step-title">Escreva o “Nome fantasia”</span>
+            É o nome pelo qual todo mundo conhece o dono. É o único campo obrigatório.
+            <span class="example"><strong>Exemplo:</strong> Alfa Comércio</span>
+          </li>
+          <li>
+            <span class="step-title">Escreva a “Razão social” (opcional)</span>
+            É o nome que consta nos documentos oficiais.
+            <span class="example"><strong>Exemplo:</strong> Alfa Comércio de Alimentos Ltda</span>
+          </li>
+          <li>
+            <span class="step-title">Escreva o “CNPJ” (opcional)</span>
+            São 14 números, com ou sem pontos, barra e traço. O painel confere os dois últimos números e recusa um CNPJ que não bate. Para pessoa física, deixe vazio. Só um dono pode ter cada CNPJ.
+          </li>
+          <li>
+            <span class="step-title">Escolha o “Nome da pasta”</span>
+            Se deixar vazio, o painel usa o nome fantasia, trocando os sinais proibidos por espaço. Escreva o nome se quiser outro.
+          </li>
+          <li>
+            <span class="step-title">Escreva os nomes alternativos, um por linha</span>
+            No formulário o campo se chama “Aliases”. Escreva as outras formas pelas quais o dono aparece nos documentos.
+            <span class="example"><strong>Exemplo:</strong> Alfa, Alfa Alimentos</span>
+          </li>
+          <li>
+            <span class="step-title">Clique em “<strong>Cadastrar dono</strong>”</span>
+            O dono aparece na lista. Clique no nome dele para ver e ajustar os detalhes.
+          </li>
+        </ol>
+        <h3 id="donos-pagina">Na página do dono</h3>
+        <ul>
+          <li><strong>Dados:</strong> mude os campos e clique em “Salvar”. O nome fantasia e a razão social atuais voltam a ser nomes alternativos a cada “Salvar”.</li>
+          <li><strong>Nomes alternativos:</strong> escreva um novo e clique em “<strong>Adicionar alias</strong>”. Para tirar um, clique em “<strong>Remover</strong>”. Cada ação vale na hora, sem “Salvar”.</li>
+          <li><strong>Situação:</strong> use “Desativar” ou “Ativar”. O dono nunca é apagado.</li>
+        </ul>
+        {% call warn("Atenção: remover apaga de verdade") %}
+        <p>Remover um nome alternativo não pede confirmação e não tem desfazer. Se foi sem querer, cadastre o nome de novo.</p>
+        <p>Só os nomes adicionais saem de vez. Os nomes que vêm do nome fantasia e da razão social atuais voltam no próximo “Salvar” dos dados.</p>
+        {% endcall %}
+
+        <h3 id="donos-dicas">Dicas</h3>
+        <ul>
+          <li>O nome fantasia e a razão social sempre voltam a ser nomes alternativos: toda vez que você clica em “Salvar” nos dados do dono, eles são criados de novo se tiverem sido removidos. Para não tê-los, mude o nome fantasia ou a razão social.</li>
+          <li>O painel guarda os nomes alternativos em letras minúsculas, sem acento e sem pontuação. “Alfa Comércio Ltda.” aparece como <code>alfa comercio ltda</code>. É normal.</li>
+          <li>Pense em como o nome aparece nos documentos: sigla, nome antigo, nome com “Ltda”. Cadastre as formas mais comuns.</li>
+          <li>Evite nomes muito genéricos, como uma palavra comum. Eles podem aparecer em documentos de outros donos.</li>
+          <li>Cada nome alternativo só pode pertencer a um dono.</li>
+          <li>Desativar não libera nada: um dono inativo continua com o CNPJ, a pasta e os nomes alternativos dele. Se o dono voltou, ative o antigo em vez de cadastrar outro.</li>
+          <li>Se mudar o nome fantasia depois, o nome novo vira alternativo, mas o antigo continua. Remova o antigo se não servir mais.</li>
+          <li>Mudar a pasta do dono não renomeia as pastas que já existem no servidor. O painel mostra um aviso azul.</li>
+          <li>Os textos aceitam até 200 letras.</li>
+        </ul>
+
+        <h3 id="donos-erros">O que pode dar errado e o que fazer</h3>
+        {{ problem_list("donos") }}
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 5. USUARIOS ================= #}
+    <section class="card chapter" id="usuarios">
+      {{ chapter_head("usuarios", "As pessoas liberadas para falar com o agente pelo Telegram.") }}
+      <div class="prose">
+        <h3 id="usuarios-para-que">Para que serve</h3>
+        <p>Aqui você cadastra as pessoas que vão poder usar o agente pelo Telegram: a lista de pessoas liberadas.</p>
+        <p>Quem não estiver na lista vai ser ignorado pelo agente, em silêncio.</p>
+        {% call tip("Nesta versão") %}<p>Nesta versão, o painel só guarda a lista. O agente ainda não atende pelo Telegram: isso virá numa próxima versão.</p>{% endcall %}
+        <p>Cada pessoa tem um {{ term("usuario", "papel") }}. Na tela eles aparecem em inglês:</p>
+        <dl class="roles">
+          <div><dt><code>admin</code> Administrador</dt><dd>Configura o painel e é criado só uma vez, pelo responsável técnico. Não precisa de departamento.</dd></div>
+          <div><dt><code>operator</code> Operador</dt><dd>Vai enviar e pedir documentos pelo Telegram. Sempre tem departamento.</dd></div>
+          <div><dt><code>reviewer</code> Revisor</dt><dd>Vai fazer o mesmo que o operador e ainda receber os casos que o agente não souber arquivar sozinho, do seu departamento.</dd></div>
+        </dl>
+
+        <h3 id="usuarios-passos">Passo a passo</h3>
+        <ol class="steps">
+          <li>
+            <span class="step-title">Descubra o “{{ term("telegram-id", "Telegram ID") }}” da pessoa</span>
+            É um número que identifica a pessoa no Telegram. Não é o telefone nem o @nome. Peça à própria pessoa ou ao responsável técnico.
+            <span class="example"><strong>Exemplo:</strong> <code>123456789</code></span>
+          </li>
+          <li>
+            <span class="step-title">Escreva o “Nome”</span>
+            <span class="example"><strong>Exemplo:</strong> Maria Exemplo</span>
+          </li>
+          <li>
+            <span class="step-title">Escolha o “Papel”</span>
+            Aparecem só <code>operator</code> (operador) e <code>reviewer</code> (revisor). Não existe a opção de administrador.
+          </li>
+          <li>
+            <span class="step-title">Escolha o “Departamento”</span>
+            A lista mostra os departamentos ativos do Template. Se estiver vazia, cadastre os departamentos primeiro.
+          </li>
+          <li>
+            <span class="step-title">Clique em “<strong>Cadastrar usuário</strong>”</span>
+            A pessoa aparece na lista.
+          </li>
+        </ol>
+        <h3 id="usuarios-editar">Corrigir e desativar</h3>
+        <ul>
+          <li>Na linha da pessoa, mude “Nome”, “Papel” ou “Departamento” e clique em “Salvar”.</li>
+          <li>O Telegram ID não pode ser mudado depois.</li>
+          <li>A linha do administrador não tem campos para editar. Só dá para ativar ou desativar.</li>
+          <li>“Desativar” deixa a pessoa inativa. O cadastro não é apagado.</li>
+          <li>O último administrador ativo nunca pode ser desativado.</li>
+        </ul>
+
+        <h3 id="usuarios-dicas">Dicas</h3>
+        <ul>
+          <li>Errou o número do Telegram? Cadastre a pessoa de novo com o número certo e desative o registro errado.</li>
+          <li>Um número só pode aparecer uma vez, mesmo que a pessoa esteja inativa.</li>
+          <li>Ao trocar uma pessoa de departamento, escolha um departamento ativo. Se ela já está num departamento que foi desativado, pode ficar nele.</li>
+          <li>Dê o papel de revisor a quem decide os casos do departamento.</li>
+        </ul>
+
+        <h3 id="usuarios-erros">O que pode dar errado e o que fazer</h3>
+        {{ problem_list("usuarios") }}
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 6. MODELO ================= #}
+    <section class="card chapter" id="modelo">
+      {{ chapter_head("modelo", "O programa de inteligência artificial que lê os documentos, e o serviço externo, que fica desligado.") }}
+      <div class="prose">
+        <h3 id="modelo-para-que">Para que serve</h3>
+        <p>O {{ term("modelo", "modelo") }} é o programa de inteligência artificial que o agente usa para entender os documentos. Ele roda neste computador.</p>
+        <p>O {{ term("provedor-externo", "provedor externo") }} é um serviço de inteligência artificial de fora da empresa. Ele vem desligado.</p>
+        <p>A regra do projeto: o conteúdo dos documentos não sai deste computador. Mesmo com o provedor externo ligado, ele só serve para entender pedidos de consulta, e os nomes dos donos são trocados por códigos antes de sair.</p>
+
+        <h3 id="modelo-passos">Passo a passo</h3>
+        <ol class="steps">
+          <li>
+            <span class="step-title">Veja o que está valendo</span>
+            O primeiro quadro mostra “Provedor externo efetivo”, com “ligado” ou “desligado”, e se a chave está presente no ambiente, com “sim” ou “não”. A chave é como uma senha do serviço externo.
+          </li>
+          <li>
+            <span class="step-title">Confira o “Nome do modelo”</span>
+            Normalmente já vem preenchido. Só use letras, números e os sinais <code>: . _ / -</code>, sem espaços.
+            <span class="example"><strong>Exemplo:</strong> <code>modelo-exemplo:8b</code></span>
+          </li>
+          <li>
+            <span class="step-title">Preencha o “{{ term("digest", "Digest") }}” só se o responsável técnico passou</span>
+            É um código que identifica a versão exata do modelo. Se não tiver, deixe vazio.
+          </li>
+          <li>
+            <span class="step-title">Deixe “<strong>Ligar provedor externo</strong>” desmarcado</span>
+            Marque só se o responsável técnico pedir e já tiver instalado a chave.
+          </li>
+          <li>
+            <span class="step-title">Clique em “Salvar”</span>
+            A partir daí, o que está no painel vale no lugar do padrão.
+          </li>
+        </ol>
+        {% call warn("Atenção: nunca digite a chave aqui") %}
+        <p>A chave do provedor externo não é escrita no painel. Quem a instala é o responsável técnico, fora do painel. O painel só mostra se a chave está presente: “sim” ou “não”.</p>
+        <p>Se a opção estiver marcada mas a chave sumir, o painel passa a mostrar o provedor externo como “desligado”, e a caixa “Ligar provedor externo” também aparece desmarcada. Se você clicar em “Salvar” assim, o provedor fica desligado de vez.</p>
+        {% endcall %}
+
+        <h3 id="modelo-dicas">Dicas</h3>
+        <ul>
+          <li>Trocar o nome do modelo sem combinar com o responsável técnico pode deixar o agente sem modelo para trabalhar.</li>
+          <li>Se tiver dúvida, não mexa. O padrão funciona.</li>
+          <li>O provedor externo só vale para consultas. Documentos nunca são enviados.</li>
+        </ul>
+
+        <h3 id="modelo-erros">O que pode dar errado e o que fazer</h3>
+        {{ problem_list("modelo") }}
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 7. PALAVRAS ================= #}
+    <section class="card chapter" id="palavras">
+      {{ chapter_head("palavras", "O que cada palavra do painel quer dizer.") }}
+      <dl class="glossary">
+        <div class="term-card" id="g-raiz"><dt>Raiz</dt><dd>A pasta principal dos documentos da empresa, quase sempre uma pasta compartilhada do servidor. O agente só trabalha dentro das raízes cadastradas.</dd></div>
+        <div class="term-card" id="g-pasta-monitorada"><dt>Pasta monitorada</dt><dd>Uma pasta dentro da raiz onde as pessoas vão deixar arquivos soltos. O agente vai olhar essa pasta de tempos em tempos (ainda não nesta versão).</dd></div>
+        <div class="term-card" id="g-template"><dt>Template</dt><dd>A lista de departamentos da empresa. É igual para todo dono.</dd></div>
+        <div class="term-card" id="g-departamento"><dt>Departamento</dt><dd>Um setor da empresa, como Financeiro. É uma pasta dentro de cada dono e também o setor de cada pessoa cadastrada.</dd></div>
+        <div class="term-card" id="g-dono"><dt>Dono</dt><dd>A empresa ou a pessoa a quem um documento pertence. Cada dono tem a sua árvore de pastas.</dd></div>
+        <div class="term-card" id="g-nome-alternativo"><dt>Nome alternativo</dt><dd>Outro nome pelo qual o dono aparece nos documentos. Na tela ele se chama “alias”. Cada nome só pode ser de um dono.</dd></div>
+        <div class="term-card" id="g-usuario"><dt>Usuário e papéis</dt><dd>Pessoa liberada para falar com o agente. Tem um papel: administrador (configura), operador (envia e pede documentos) ou revisor (também decide os casos do departamento).</dd></div>
+        <div class="term-card" id="g-telegram-id"><dt>Telegram ID</dt><dd>Um número que identifica a pessoa no Telegram. Não é o telefone nem o @nome.</dd></div>
+        <div class="term-card" id="g-modelo"><dt>Modelo</dt><dd>O programa de inteligência artificial que ajuda o agente a entender os documentos. Roda neste computador.</dd></div>
+        <div class="term-card" id="g-digest"><dt>Digest</dt><dd>Um código que identifica a versão exata do modelo. É opcional.</dd></div>
+        <div class="term-card" id="g-provedor-externo"><dt>Provedor externo</dt><dd>Serviço de inteligência artificial de fora da empresa. Vem desligado e só liga se a chave estiver instalada.</dd></div>
+        <div class="term-card" id="g-auditoria"><dt>Auditoria</dt><dd>O registro de tudo que foi mudado: o quê, quando e por qual via (painel ou comando do responsável técnico). Ninguém consegue editar ou apagar esse registro.</dd></div>
+        <div class="term-card" id="g-ativo"><dt>Ativo e inativo</dt><dd>Em vez de apagar, o painel desativa. O item inativo fica guardado e pode voltar a ser ativado.</dd></div>
+        <div class="term-card" id="g-montagem"><dt>Ponto de montagem</dt><dd>É o nome técnico de uma pasta compartilhada (ou disco) conectada a este computador. No Mac, ela aparece no Finder e normalmente fica em /Volumes.</dd></div>
+        <div class="term-card" id="g-responsavel"><dt>Responsável técnico</dt><dd>A pessoa que instalou e cuida do agente. É quem resolve o que o painel não faz.</dd></div>
+      </dl>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 8. PROBLEMAS COMUNS ================= #}
+    <section class="card chapter" id="problemas">
+      {{ chapter_head("problemas", "Quando algo não sai como esperado.") }}
+      <div class="prose">
+        <p>Quase sempre aparece uma caixa vermelha no alto da página, com uma frase. Procure essa frase abaixo. Se ela for de uma seção, o capítulo da seção também explica.</p>
+
+        <h3 id="problemas-situacoes">Situações</h3>
+        <div class="problems">
+          {% call situation("nao-abre", "A página não abre") %}
+          <p><strong>O que significa:</strong> O painel só funciona no computador onde ele roda. De propósito, ele não abre em outro computador nem no celular.</p>
+          <p><strong>O que fazer:</strong> Use o computador do painel e digite <code>http://127.0.0.1:8765</code>. Se não abrir mesmo assim, o painel pode estar desligado. Chame o responsável técnico.</p>
+          {% endcall %}
+          {% call situation("sem-aviso", "Cliquei em salvar e parece que nada aconteceu") %}
+          <p><strong>O que significa:</strong> Quando dá certo, a página só recarrega. O painel não mostra uma mensagem de “salvo”.</p>
+          <p><strong>O que fazer:</strong> Procure o item na lista. Se ele estiver lá, está salvo. Se apareceu uma caixa vermelha, nada foi salvo.</p>
+          {% endcall %}
+          {% call situation("sem-formularios", "Os formulários e os botões de ativar sumiram") %}
+          <p><strong>O que significa:</strong> O painel está bloqueado: ainda não existe administrador. Ele só deixa olhar.</p>
+          <p><strong>O que fazer:</strong> Veja o item <a href="#bloqueado">“Cadastro bloqueado”</a> mais abaixo.</p>
+          {% endcall %}
+          {% call situation("errei-e-salvei", "Digitei errado e já salvei") %}
+          <p><strong>O que fazer:</strong> Na maioria dos itens basta corrigir o campo e salvar de novo. Há três exceções.</p>
+          <ul>
+            <li>Raiz: o endereço não pode ser corrigido. Desative a raiz errada e tente cadastrar a certa. Se o painel recusar, chame o responsável técnico.</li>
+            <li>Telegram ID: cadastre a pessoa de novo e desative o registro errado.</li>
+            <li>Nome alternativo: use “Remover” e cadastre o certo.</li>
+          </ul>
+          {% endcall %}
+          {% call situation("pastas-antigas", "Mudei o nome de uma pasta e as pastas antigas continuam no servidor") %}
+          <p><strong>O que significa:</strong> É assim mesmo. O painel não renomeia pastas que já existem.</p>
+          <p><strong>O que fazer:</strong> Deixe como estão, ou combine com o responsável técnico antes de renomear as pastas no servidor.</p>
+          {% endcall %}
+        </div>
+
+        <h3 id="problemas-frases">Frases que aparecem na tela</h3>
+        {{ problem_list("problemas") }}
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 9. SEGURANCA ================= #}
+    <section class="card chapter" id="seguranca">
+      {{ chapter_head("seguranca", "O que você precisa saber para usar o painel com cuidado.") }}
+      <div class="prose">
+        <ul class="plain-list">
+          <li><strong>O painel só abre neste computador.</strong> Ele não aceita visitas de outros aparelhos da rede.</li>
+          <li><strong>O painel não tem senha própria.</strong> Quem estiver usando este computador, na frente dele ou por acesso remoto, pode mudar as configurações. Não deixe o painel aberto e a tela destravada quando sair.</li>
+          <li><strong>Nunca digite senhas ou chaves em nenhum campo.</strong> Nenhuma tela do painel pede isso. A chave do provedor externo não é digitada aqui: o painel só mostra se ela está presente.</li>
+          <li><strong>Cuidado com capturas de tela.</strong> Elas podem mostrar nomes de donos, CNPJ, nomes de pessoas e endereços de pastas. Não compartilhe imagens com dados reais fora da empresa.</li>
+          <li><strong>Os exemplos deste manual são inventados.</strong> Nenhum nome, número ou endereço dele é de uma empresa real.</li>
+        </ul>
+        {% call tip("Em caso de dúvida") %}<p>Se algo na tela parecer estranho, ou pedir uma senha, pare e chame o responsável técnico da sua instalação.</p>{% endcall %}
+      </div>
+      {{ back_top() }}
+    </section>
+
+    {# ================= 10. AJUDA ================= #}
+    <section class="card chapter" id="ajuda">
+      {{ chapter_head("ajuda", "O que o painel não faz. Isso é com o responsável técnico.") }}
+      <div class="prose">
+        <p>Chame o responsável técnico da sua instalação quando precisar de algo desta lista.</p>
+        <ul class="plain-list">
+          <li><strong>Criar o primeiro administrador.</strong> O painel nunca faz isso. Sem ele, o painel só deixa olhar.</li>
+          <li><strong>Guardar ou carregar uma cópia do cadastro em arquivo.</strong> A cópia do cadastro (exportar) e a carga a partir de um arquivo (importar) são feitas fora do painel. A carga só funciona num cadastro vazio e não mistura com o que já existe.</li>
+          <li><strong>Instalar ou trocar a chave do provedor externo.</strong> A chave nunca é digitada no painel.</li>
+          <li><strong>Cópias de segurança (backup)</strong> do cadastro e da auditoria, e a restauração delas.</li>
+          <li><strong>Painel desligado ou que não abre.</strong> Depois que o painel é religado, as páginas que estavam abertas expiram. Abra a seção de novo pelo menu do painel.</li>
+          <li><strong>Raiz cadastrada com o endereço errado</strong> que impede cadastrar a certa.</li>
+          <li><strong>Nome ou pasta presos</strong> por um departamento ou dono desativado, quando não dá para ativar o antigo nem usar outro nome.</li>
+          <li><strong>Permissão de escrita</strong> na pasta compartilhada e conexão do servidor de arquivos neste computador.</li>
+          <li><strong>Troca de administrador.</strong></li>
+          <li><strong>“erro interno”</strong> que se repete.</li>
+        </ul>
+        <h3 id="ajuda-checklist">Ao pedir ajuda, tenha à mão</h3>
+        <ul>
+          <li>A página em que você estava e o que tentou fazer.</li>
+          <li>A frase exata da caixa vermelha.</li>
+          <li>Se for enviar uma captura de tela, esconda os dados reais antes.</li>
+        </ul>
+      </div>
+      {{ back_top() }}
+    </section>
+
+  </div>
+</div>
+{% endblock %}

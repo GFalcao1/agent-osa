@@ -139,9 +139,8 @@ def session(engine: Engine) -> Iterator[Session]:
         connection.close()
 
 
-@pytest.fixture
-def empty_database(test_url: URL) -> Iterator[URL]:
-    """A brand-new empty database created by this fixture and dropped afterwards."""
+def _fresh_database(test_url: URL) -> Iterator[URL]:
+    """A brand-new empty database created here and dropped afterwards."""
     name = f"osa_test_mig_{secrets.token_hex(6)}"
     assert _MIGRATION_DB.fullmatch(name)
     url = checked_test_url(test_url.set(database=name), _MIGRATION_DB)
@@ -168,3 +167,26 @@ def empty_database(test_url: URL) -> Iterator[URL]:
             probe.dispose()
         assert tables == 0, "migration database must start empty"
         yield url
+
+
+@pytest.fixture
+def empty_database(test_url: URL) -> Iterator[URL]:
+    """A brand-new empty database created by this fixture and dropped afterwards."""
+    yield from _fresh_database(test_url)
+
+
+@pytest.fixture
+def other_migrated_database(
+    test_url: URL, alembic_config: Callable[[URL], Config]
+) -> Iterator[URL]:
+    """A second, independent migrated database (round trips between installations)."""
+    for url in _fresh_database(test_url):
+        command.upgrade(alembic_config(url), "head")
+        yield url
+
+
+@pytest.fixture
+def migrated_database(empty_database: URL, alembic_config: Callable[[URL], Config]) -> URL:
+    """A brand-new database already at the Alembic head (still no registry rows)."""
+    command.upgrade(alembic_config(empty_database), "head")
+    return empty_database
