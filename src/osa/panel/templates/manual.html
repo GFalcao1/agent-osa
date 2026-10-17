@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_ui.html" import icon %}
 {% set section = "manual" %}
 {% block title %}Manual de uso{% endblock %}
 
@@ -26,14 +25,14 @@
 
 {% macro tip(title="Dica") -%}
 <aside class="callout callout-tip">
-  {{ icon("info") }}
+  {{ icon("info", "duotone") }}
   <div><strong class="callout-title">{{ title }}</strong>{{ caller() }}</div>
 </aside>
 {%- endmacro %}
 
 {% macro warn(title="Atenção") -%}
 <aside class="callout callout-warn">
-  {{ icon("alert") }}
+  {{ icon("warning", "duotone") }}
   <div><strong class="callout-title">{{ title }}</strong>{{ caller() }}</div>
 </aside>
 {%- endmacro %}
@@ -43,7 +42,7 @@
 {%- endmacro %}
 
 {% macro back_top() -%}
-<p class="back-top-row"><a class="back-top" href="#topo">&uarr; Voltar ao topo</a></p>
+<p class="back-top-row"><a class="back-top" href="#topo">{{ icon("arrow-up") }}Voltar ao topo</a></p>
 {%- endmacro %}
 
 {% macro problem_list(key) -%}
@@ -67,7 +66,8 @@
 
 {% block content %}
 <header class="page-head" id="topo">
-  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Manual de uso</h1></div>
+  <p class="eyebrow">Ajuda</p>
+  <h1>Manual de uso</h1>
   <p class="lead">Um guia para quem vai usar o painel no dia a dia. Não precisa saber de informática: cada capítulo diz o que fazer, passo a passo, e o que fazer quando algo dá errado.</p>
 </header>
 
@@ -77,7 +77,7 @@
     {{ toc_list() }}
   </nav>
   <details class="manual-toc manual-toc-narrow">
-    <summary>{{ icon("book") }}<span>Neste manual</span></summary>
+    <summary><span>Neste manual</span></summary>
     <nav aria-label="Neste manual">{{ toc_list() }}</nav>
   </details>
 
@@ -120,6 +120,7 @@
 
         <h3 id="comece-configurar">O que quer dizer “configurar”</h3>
         <p>Configurar é preencher essas telas uma vez. Depois você só ajusta quando algo muda.</p>
+        <p>Quando uma alteração é guardada, a página mostra no alto uma faixa com um sinal de certo e o nome do item, como “Departamento Fiscal salvo.”. Se aparecer uma faixa vermelha, nada foi salvo. A faixa aparece uma vez só: se você recarregar a página, ela some.</p>
         <ul>
           <li>Chegou um cliente novo? Cadastre um dono.</li>
           <li>Entrou alguém na equipe? Cadastre um usuário.</li>
@@ -136,11 +137,12 @@
         <h3 id="comece-salva">Como o painel salva</h3>
         <ul>
           <li><strong>Salva na hora.</strong> Cada formulário tem o seu próprio botão, como “Cadastrar”, “Salvar” ou “Adicionar”. Não existe um botão “salvar tudo”.</li>
-          <li><strong>Deu certo?</strong> A página recarrega e o item aparece na lista. Não há mensagem de “salvo”.</li>
-          <li><strong>Deu errado?</strong> Aparece uma caixa vermelha no alto, com o motivo. Nada foi salvo.</li>
+          <li><strong>Deu certo?</strong> A página recarrega, mostra uma faixa com o nome do item e ele aparece na lista.</li>
+          <li><strong>Deu errado?</strong> Aparece uma caixa vermelha no alto, com o motivo e a frase “Nada foi salvo.”.</li>
           <li><strong>Quase nada se apaga.</strong> Você desativa. O item inativo fica guardado e pode ser ativado de novo.</li>
+          <li><strong>Antes de desativar ou remover, o painel pergunta.</strong> Aparece uma faixa com o nome do item e dois botões. Só o botão de confirmar muda alguma coisa. “Cancelar” deixa tudo como estava.</li>
         </ul>
-        {% call tip("Exceção") %}<p>Um botão “Remover” de nome alternativo apaga de verdade. Mas você pode cadastrar o nome de novo. Os nomes que vêm do nome fantasia e da razão social voltam sozinhos quando você salva o dono.</p>{% endcall %}
+        {% call tip("Exceção") %}<p>Um botão “Remover” de nome alternativo apaga de verdade, depois que você confirma. Mas você pode cadastrar o nome de novo. Os nomes que vêm do nome fantasia e da razão social voltam sozinhos quando você salva o dono.</p>{% endcall %}
 
         <h3 id="comece-auditoria">Tudo fica registrado</h3>
         <p>Toda mudança entra na {{ term("auditoria", "auditoria") }}: o que mudou, em que dia e a que horas. Esse registro não pode ser editado nem apagado.</p>
@@ -190,7 +192,7 @@
           </li>
           <li>
             <span class="step-title">Para parar de usar, clique em “<strong>Desativar</strong>”</span>
-            A raiz ou a pasta fica “inativa”. Nada é apagado nem movido no servidor. Para voltar a usar, clique em “<strong>Ativar</strong>”.
+            O painel pede uma confirmação, com o nome da raiz ou da pasta. Ao confirmar, ela fica “inativa”. Nada é apagado nem movido no servidor. Para voltar a usar, clique em “<strong>Ativar</strong>”, que não pede confirmação.
           </li>
         </ol>
         {% call warn("Atenção: o teste de escrita") %}
@@ -254,15 +256,15 @@
           </li>
           <li>
             <span class="step-title">Arrume a ordem com “<strong>Subir</strong>” e “<strong>Descer</strong>”</span>
-            Cada clique move o departamento uma posição. A ordem não muda nenhuma pasta.
+            São as setas, no fim da linha. Cada clique move o departamento uma posição. A ordem não muda nenhuma pasta.
           </li>
           <li>
             <span class="step-title">Para corrigir, mude os campos da linha e clique em “Salvar”</span>
-            Você pode mudar o nome, a pasta e a caixa do ano.
+            Você pode mudar o nome, a pasta e a caixa do ano. O botão “Salvar” da linha só ganha cor quando algo naquela linha mudou.
           </li>
           <li>
             <span class="step-title">Para tirar da lista, clique em “<strong>Desativar</strong>”</span>
-            O departamento fica “inativo”. Ele não é apagado. Não dá para escolher um departamento inativo para uma pessoa nova.
+            O painel pede uma confirmação com o nome do departamento. Ao confirmar, ele fica “inativo”. Ele não é apagado. Não dá para escolher um departamento inativo para uma pessoa nova.
           </li>
         </ol>
         {% call warn("Atenção: renomear não renomeia as pastas") %}
@@ -311,7 +313,7 @@
           </li>
           <li>
             <span class="step-title">Escreva o “CNPJ” (opcional)</span>
-            São 14 números, com ou sem pontos, barra e traço. O painel confere os dois últimos números e recusa um CNPJ que não bate. Para pessoa física, deixe vazio. Só um dono pode ter cada CNPJ.
+            O campo mostra o teclado de números. São 14 números, com ou sem pontos, barra e traço. O painel confere os dois últimos números e recusa um CNPJ que não bate. Para pessoa física, deixe vazio. Só um dono pode ter cada CNPJ.
           </li>
           <li>
             <span class="step-title">Escolha o “Nome da pasta”</span>
@@ -330,11 +332,11 @@
         <h3 id="donos-pagina">Na página do dono</h3>
         <ul>
           <li><strong>Dados:</strong> mude os campos e clique em “Salvar”. O nome fantasia e a razão social atuais voltam a ser nomes alternativos a cada “Salvar”.</li>
-          <li><strong>Nomes alternativos:</strong> escreva um novo e clique em “<strong>Adicionar alias</strong>”. Para tirar um, clique em “<strong>Remover</strong>”. Cada ação vale na hora, sem “Salvar”.</li>
+          <li><strong>Nomes alternativos:</strong> escreva um novo e clique em “<strong>Adicionar alias</strong>”. Para tirar um, clique em “<strong>Remover</strong>” e depois em confirmar. Cada ação vale na hora, sem “Salvar”.</li>
           <li><strong>Situação:</strong> use “Desativar” ou “Ativar”. O dono nunca é apagado.</li>
         </ul>
         {% call warn("Atenção: remover apaga de verdade") %}
-        <p>Remover um nome alternativo não pede confirmação e não tem desfazer. Se foi sem querer, cadastre o nome de novo.</p>
+        <p>Ao clicar em “Remover”, o painel mostra o nome e pede uma confirmação. Só depois de confirmar o nome é apagado, e não há desfazer. Se foi sem querer, cadastre o nome de novo.</p>
         <p>Só os nomes adicionais saem de vez. Os nomes que vêm do nome fantasia e da razão social atuais voltam no próximo “Salvar” dos dados.</p>
         {% endcall %}
 
@@ -376,7 +378,7 @@
         <ol class="steps">
           <li>
             <span class="step-title">Descubra o “{{ term("telegram-id", "Telegram ID") }}” da pessoa</span>
-            É um número que identifica a pessoa no Telegram. Não é o telefone nem o @nome. Peça à própria pessoa ou ao responsável técnico.
+            É um número que identifica a pessoa no Telegram. Não é o telefone nem o @nome. Peça à própria pessoa ou ao responsável técnico. O campo só aceita números.
             <span class="example"><strong>Exemplo:</strong> <code>123456789</code></span>
           </li>
           <li>
@@ -389,7 +391,7 @@
           </li>
           <li>
             <span class="step-title">Escolha o “Departamento”</span>
-            A lista mostra os departamentos ativos do Template. Se estiver vazia, cadastre os departamentos primeiro.
+            A lista mostra os departamentos ativos do Template. Se estiver vazia, a página mostra o aviso “Antes, cadastre um departamento no Template”, com o link, no lugar do formulário.
           </li>
           <li>
             <span class="step-title">Clique em “<strong>Cadastrar usuário</strong>”</span>
@@ -401,7 +403,7 @@
           <li>Na linha da pessoa, mude “Nome”, “Papel” ou “Departamento” e clique em “Salvar”.</li>
           <li>O Telegram ID não pode ser mudado depois.</li>
           <li>A linha do administrador não tem campos para editar. Só dá para ativar ou desativar.</li>
-          <li>“Desativar” deixa a pessoa inativa. O cadastro não é apagado.</li>
+          <li>“Desativar” pede uma confirmação com o nome da pessoa. Ao confirmar, ela fica inativa. O cadastro não é apagado.</li>
           <li>O último administrador ativo nunca pode ser desativado.</li>
         </ul>
 
@@ -506,7 +508,7 @@
           <p><strong>O que fazer:</strong> Use o computador do painel e digite <code>http://127.0.0.1:8765</code>. Se não abrir mesmo assim, o painel pode estar desligado. Chame o responsável técnico.</p>
           {% endcall %}
           {% call situation("sem-aviso", "Cliquei em salvar e parece que nada aconteceu") %}
-          <p><strong>O que significa:</strong> Quando dá certo, a página só recarrega. O painel não mostra uma mensagem de “salvo”.</p>
+          <p><strong>O que significa:</strong> Quando dá certo, a página recarrega e mostra no alto uma faixa com o nome do item. Ela some se você recarregar a página.</p>
           <p><strong>O que fazer:</strong> Procure o item na lista. Se ele estiver lá, está salvo. Se apareceu uma caixa vermelha, nada foi salvo.</p>
           {% endcall %}
           {% call situation("sem-formularios", "Os formulários e os botões de ativar sumiram") %}
@@ -518,7 +520,7 @@
           <ul>
             <li>Raiz: o endereço não pode ser corrigido. Desative a raiz errada e tente cadastrar a certa. Se o painel recusar, chame o responsável técnico.</li>
             <li>Telegram ID: cadastre a pessoa de novo e desative o registro errado.</li>
-            <li>Nome alternativo: use “Remover” e cadastre o certo.</li>
+            <li>Nome alternativo: use “Remover”, confirme, e cadastre o certo.</li>
           </ul>
           {% endcall %}
           {% call situation("pastas-antigas", "Mudei o nome de uma pasta e as pastas antigas continuam no servidor") %}

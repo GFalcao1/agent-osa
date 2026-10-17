@@ -6,7 +6,11 @@ Three layers keep it that way, because a browser tab on the same machine can sti
 a loopback peer with an exact ``Host``; and every mutation must carry a same-origin
 ``Origin``/``Referer`` plus a double-submit CSRF token signed with a per-process secret
 (a cookie planted by another ``127.0.0.1:<port>`` origin does not verify). Secrets are
-never rendered. ADR 0005 records why there is no login.
+never rendered. ADR 0005 records why there is no login. Scripts, animations and icons are
+self-hosted files served by the same middleware (``osa.panel.assets``, an exact-path
+allowlist); the Content-Security-Policy below allows nothing but ``'self'`` for them (fonts
+included: with no ``font-src`` they fall back to ``default-src 'self'``). Every response is
+``no-store`` except the content-hashed font files, which may be kept by the browser.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from osa.admin.services import MountPredicate, default_is_mount_point
 from osa.core.settings import Settings
+from osa.panel import assets
 from osa.panel.routes import departments, home, manual, model, owners, roots, users
 from osa.panel.routes.common import CSRF_COOKIE, csrf_guard, csrf_token_is_valid, new_csrf_token
 from osa.panel.styles import CSS
@@ -46,6 +51,10 @@ SECURITY_HEADERS: Final = {
     "x-content-type-options": "nosniff",
     "cache-control": "no-store",
 }
+# Only for the hashed, immutable /fonts/ files (see ``assets.IMMUTABLE_PATHS``), and only on a
+# successful read: refusals, errors and every other path keep ``no-store``. ``private``: no
+# shared cache may store it.
+IMMUTABLE_CACHE: Final = "private, max-age=31536000, immutable"
 
 
 def validate_bind_host(host: str) -> str:
@@ -122,6 +131,12 @@ class LocalOnlyMiddleware:
                 out = MutableHeaders(scope=message)
                 for name, value in SECURITY_HEADERS.items():
                     out[name] = value
+                if (
+                    message["status"] == 200
+                    and scope["method"] in _SAFE_METHODS
+                    and scope["path"] in assets.IMMUTABLE_PATHS
+                ):
+                    out["cache-control"] = IMMUTABLE_CACHE
                 if fresh:
                     out.append(
                         "set-cookie", f"{CSRF_COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/"
@@ -182,6 +197,8 @@ def create_app(
     @application.get("/theme.js", include_in_schema=False)
     def theme_script() -> Response:
         return Response(JS, media_type="text/javascript")
+
+    assets.register(application)  # exact-path allowlist: motion.js, Lottie, favicon
 
     for module in (home, roots, departments, owners, users, model, manual):
         application.include_router(module.router)

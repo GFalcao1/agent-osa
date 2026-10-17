@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import Response
@@ -8,7 +8,16 @@ from sqlalchemy.orm import Session
 
 from osa.admin import services
 from osa.db.models import Department, User
-from osa.panel.routes.common import ACTOR, get_session, mutate, parse_int, render
+from osa.panel.routes.common import (
+    ACTOR,
+    confirmation,
+    get_session,
+    must_confirm,
+    mutate,
+    parse_int,
+    parse_telegram_id,
+    render,
+)
 
 router = APIRouter()
 Text = Annotated[str, Form()]
@@ -16,7 +25,12 @@ ROLES = ("operator", "reviewer")  # the form never offers admin: only the bootst
 
 
 def _page(
-    request: Request, session: Session, *, error: str | None = None, status: int = 200
+    request: Request,
+    session: Session,
+    *,
+    error: str | None = None,
+    status: int = 200,
+    confirm: dict[str, Any] | None = None,
 ) -> Response:
     users = list(session.scalars(select(User).order_by(User.id)))
     departments = list(
@@ -34,7 +48,7 @@ def _page(
             "department_names": names,
             "roles": ROLES,
         },
-        error=error, status=status,
+        error=error, status=status, confirm=confirm,
     )  # fmt: skip
 
 
@@ -60,7 +74,7 @@ def create_user(
         session,
         lambda: services.create_user(
             session,
-            telegram_id=parse_int(telegram_id, "telegram_id"),
+            telegram_id=parse_telegram_id(telegram_id),
             nome=nome,
             papel=papel,
             departamento_id=parse_int(departamento_id, "departamento"),
@@ -68,6 +82,7 @@ def create_user(
         ),
         done="/users",
         fail=_fail(request, session),
+        saved="usuario-cadastrado",
     )
 
 
@@ -92,16 +107,42 @@ def update_user(
         ),
         done="/users",
         fail=_fail(request, session),
+        saved="usuario-salvo",
+        ref=user_id,
     )
 
 
 @router.post("/users/{user_id}/ativo")
 def toggle_user(
-    request: Request, user_id: int, ativo: Text = "0", session: Session = Depends(get_session)
+    request: Request,
+    user_id: int,
+    ativo: Text = "0",
+    confirmar: Text = "",
+    session: Session = Depends(get_session),
 ) -> Response:
+    user = session.get(User, user_id)
+    if user is not None and must_confirm(session, confirmar, destructive=ativo != "1"):
+        return _page(
+            request,
+            session,
+            confirm=confirmation(
+                before="Desativar o usuário ",
+                name=user.nome,
+                after="?",
+                detail="Essa pessoa deixa de falar com o agente pelo Telegram. O cadastro não é "
+                "apagado, e você pode ativá-la de novo.",
+                action=f"/users/{user_id}/ativo",
+                fields={"ativo": "0"},
+                button="Desativar",
+                glyph="power",
+                cancel="/users",
+            ),
+        )
     return mutate(
         session,
         lambda: services.set_user_active(session, user_id, ativo == "1", actor=ACTOR),
         done="/users",
         fail=_fail(request, session),
+        saved="usuario-ativado" if ativo == "1" else "usuario-desativado",
+        ref=user_id,
     )

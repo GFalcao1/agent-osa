@@ -44,4 +44,5 @@ def save_model(
         ),
         done="/model",
         fail=lambda message, status: _page(request, session, error=message, status=status),
+        saved="modelo-salvo",
     )

@@ -341,8 +341,7 @@ PROBLEMS: Final[dict[str, tuple[Problem, ...]]] = {
         ),
         Problem(
             "alias não encontrado",
-            "O nome alternativo já tinha sido removido, por exemplo com dois cliques em "
-            "Remover ou em outra aba.",
+            "O nome alternativo já tinha sido removido, por exemplo em outra aba do navegador.",
             "Abra o dono de novo pela lista de donos e confira os nomes alternativos.",
         ),
         *FOLDER_NAME_PROBLEMS,
@@ -355,9 +354,12 @@ PROBLEMS: Final[dict[str, tuple[Problem, ...]]] = {
     ),
     "usuarios": (
         Problem(
-            "telegram_id deve ser um número inteiro",
-            "O campo Telegram ID só aceita números, sem letras, espaços ou sinais.",
-            "Digite só o número da pessoa no Telegram. Não é o telefone nem o @nome.",
+            "Telegram ID deve ser só números. Não é o telefone nem o @nome: peça o número "
+            "à própria pessoa.",
+            "O campo Telegram ID só aceita números, sem letras, espaços ou sinais. O navegador "
+            "também pode barrar o envio antes, com um aviso dele.",
+            "Digite só o número da pessoa no Telegram. Não é o telefone nem o @nome. Peça o "
+            "número à própria pessoa ou ao responsável técnico.",
         ),
         Problem(
             "telegram_id deve ser um inteiro positivo",
@@ -384,7 +386,8 @@ PROBLEMS: Final[dict[str, tuple[Problem, ...]]] = {
         Problem(
             "departamento deve ser um número inteiro",
             "Nenhum departamento foi escolhido. Isso acontece quando ainda não existe "
-            "nenhum departamento ativo: a lista de departamentos fica vazia.",
+            "nenhum departamento ativo. Nesse caso a página mostra um aviso no lugar do "
+            "formulário.",
             "Cadastre antes os departamentos, na seção Template. Depois volte e cadastre a pessoa.",
         ),
         Problem(
