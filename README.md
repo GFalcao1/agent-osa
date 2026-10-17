@@ -176,3 +176,26 @@ uv run pytest -q
 
 Depois de editar uma animação em `tools/lottie/generate.py`, rode o gerador e o
 passo `manifest`.
+
+## CI
+
+`.github/workflows/ci.yml` roda o gate comum de `tasks/GATES.md` em todo pull
+request e em push para `main`, com Python 3.12 (o mínimo de `requires-python`;
+uma matriz só valeria o custo com mais de uma versão suportada). Jobs, em
+paralelo, e como reproduzir cada um localmente:
+
+| Job | Prova | Localmente |
+|---|---|---|
+| `lint` | Estilo e imports | `uv run ruff check . && uv run ruff format --check .` |
+| `typecheck` | mypy estrito em `src/osa` | `uv run mypy src/osa` |
+| `hygiene` | `uv.lock` coerente com `pyproject.toml`; nenhum `.env`, chave ou string com cara de segredo versionado | `uv lock --check` e os `git grep` do próprio workflow |
+| `tests-portable` | Suite portável sem banco e sem variável `OSA_*`; falha com zero testes coletados ou com os testes do tema (Node.js) pulados | `uv run pytest -q` (com `node` no PATH) |
+| `tests-integration` | Suite de integração contra PostgreSQL 17 descartável, com papel sem SUPERUSER (só CREATEDB) e banco `osa_test` | `OSA_TEST_DATABASE_URL=postgresql://<papel>:<senha>@127.0.0.1:5432/osa_test uv run pytest -m integration -q` |
+
+As suites `native` (share SMB de teste) e `live` (Ollama) **não** rodam no CI:
+dependem de ambiente real e cada skip fica no registro da task. A suite de
+integração precisa de um PostgreSQL descartável cujo papel tenha `CREATEDB`
+(ela cria e apaga bancos `osa_test_mig_*`) e aplica `alembic upgrade head`
+sozinha. O CI não usa segredos: as credenciais do container são fictícias e
+descartáveis. `.github/dependabot.yml` propõe atualizações semanais agrupadas
+das actions (fixadas por SHA) e das dependências Python.

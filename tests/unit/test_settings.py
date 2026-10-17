@@ -12,6 +12,10 @@ from pydantic import SecretStr, ValidationError
 
 from osa.core.settings import Settings
 
+# Repository files are read from here, not from the working directory, so the
+# suite does not depend on where pytest was started.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 PRODUCTION = {
     "environment": "production",
     "database_url": "postgresql://osa:fictional-db-pass@db.example.test:5432/osa",
@@ -332,8 +336,8 @@ def test_package_import_is_side_effect_free(tmp_path: Path) -> None:
 
 
 def test_package_metadata_and_ignore_rules_are_safe() -> None:
-    project = tomllib.loads(Path("pyproject.toml").read_text())
-    ignored_paths = Path(".gitignore").read_text()
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    ignored_paths = (REPO_ROOT / ".gitignore").read_text()
 
     assert project["project"]["requires-python"] == ">=3.12"
     assert any(d.startswith("structlog") for d in project["project"]["dependencies"])
@@ -344,7 +348,7 @@ def test_package_metadata_and_ignore_rules_are_safe() -> None:
 
 
 def test_env_example_lists_every_setting_with_default() -> None:
-    lines = Path(".env.example").read_text().splitlines()
+    lines = (REPO_ROOT / ".env.example").read_text().splitlines()
     active = {
         line.split("=", 1)[0].removeprefix("# ").strip()
         for line in lines
@@ -355,7 +359,7 @@ def test_env_example_lists_every_setting_with_default() -> None:
 
 
 def test_env_example_production_block_lists_only_required_settings() -> None:
-    lines = Path(".env.example").read_text().splitlines()
+    lines = (REPO_ROOT / ".env.example").read_text().splitlines()
     start = next(i for i, line in enumerate(lines) if line.startswith("# Required in production"))
     block = []
     for line in lines[start + 1 :]:
@@ -387,7 +391,7 @@ def test_socket_connection_paths_are_blocked() -> None:
 
 
 def test_declares_native_and_live_markers() -> None:
-    project = tomllib.loads(Path("pyproject.toml").read_text())
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
     markers = project["tool"]["pytest"]["ini_options"].get("markers", [])
 
     assert any(marker.startswith("native:") for marker in markers)

@@ -1,0 +1,25 @@
+# Atualizações semanais, agrupadas, com poucos PRs abertos por vez.
+# As actions são fixadas por SHA em .github/workflows/ci.yml; o Dependabot
+# atualiza o SHA e o comentário de versão juntos. O ecossistema `uv` atualiza
+# uv.lock a partir de pyproject.toml.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
