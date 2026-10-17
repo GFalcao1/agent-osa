@@ -1,39 +1,44 @@
 {% extends "base.html" %}
-{% from "_ui.html" import icon, badge, help_block with context %}
+{% from "_ui.html" import badge, help_block with context %}
 {% set section = "index" %}
 {% block title %}Início{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Agent O.S.A. — painel de configuração</h1></div>
+  <p class="eyebrow">Agent O.S.A.</p>
+  <h1>Painel de configuração</h1>
   <p class="lead">Cadastro da instalação: raízes, template de departamentos, donos, usuários e modelo.</p>
 </header>
-{% call help_block("comece", errors="problemas") %}Esta é a página inicial. Os quadros mostram quantos itens já foram cadastrados, e cada um abre a sua seção. Siga a ordem do manual: Raízes, Template, Donos, Usuários e Modelo. O quadro Modelo efetivo só mostra informações.{% endcall %}
-<a class="card manual-cta" href="/manual">
-  {{ icon("book") }}
+{% call help_block("comece", errors="problemas") %}Esta é a página inicial. Os quadros no alto mostram quantos itens já foram cadastrados, e cada um abre a sua seção. Siga a ordem do manual: Raízes, Template, Donos, Usuários e Modelo. O quadro Modelo efetivo só mostra informações.{% endcall %}
+{% set links = {"raízes": "/roots", "departamentos": "/departments", "donos": "/owners", "usuários": "/users"} %}
+<section class="stats-block" aria-label="Cadastro">
+  <div class="grid stats">
+    {% for label, count in counts.items() %}
+    <a class="card stat" href="{{ links.get(label, '/') }}">
+      <span class="label">{{ label | capitalize }}</span>
+      <span class="value">{{ count }}</span>
+      <span class="more">Abrir {{ icon("arrow-right") }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% if next_step %}
+  <p class="next-step">Próximo passo: <a href="{{ next_step.href }}">{{ next_step.label }}</a></p>
+  {% endif %}
+</section>
+<a class="card manual-link" href="/manual">
   <div>
     <strong class="cta-title">Manual de uso</strong>
     <p>Primeira vez aqui? O manual explica cada seção passo a passo, com exemplos, e diz o que fazer quando algo dá errado.</p>
   </div>
-  <span class="more">Abrir o manual &rarr;</span>
+  <span class="more">Abrir o manual {{ icon("arrow-right") }}</span>
 </a>
 <div class="notice" role="note">
-  {{ icon("lock") }}
+  {{ icon("lock", "duotone") }}
   <div>
     <strong class="alert-title">Acesso somente local</strong>
     <p>Este painel não tem autenticação própria na V1: só é alcançável nesta
       máquina (<code>127.0.0.1</code>). Não exponha a porta na rede.</p>
   </div>
 </div>
-{% set links = {"raízes": "/roots", "departamentos": "/departments", "donos": "/owners", "usuários": "/users"} %}
-<section class="grid" aria-label="Cadastro">
-  {% for label, count in counts.items() %}
-  <a class="card stat" href="{{ links.get(label, '/') }}">
-    <span class="label">{{ label | capitalize }}</span>
-    <span class="value">{{ count }}</span>
-    <span class="more">Abrir &rarr;</span>
-  </a>
-  {% endfor %}
-</section>
 <section class="card lift">
   <div class="card-head"><h2>Modelo efetivo</h2></div>
   <div class="facts">

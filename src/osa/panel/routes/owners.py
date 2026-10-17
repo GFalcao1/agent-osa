@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import Response
@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session
 
 from osa.admin import services
 from osa.db.models import Owner, OwnerAlias
-from osa.panel.routes.common import ACTOR, get_session, mutate, render
+from osa.panel.routes.common import (
+    ACTOR,
+    confirmation,
+    get_session,
+    must_confirm,
+    mutate,
+    render,
+)
 
 router = APIRouter()
 Text = Annotated[str, Form()]
@@ -28,6 +35,7 @@ def _detail_page(
     *,
     error: str | None = None,
     status: int = 200,
+    confirm: dict[str, Any] | None = None,
 ) -> Response:
     owner = session.get(Owner, owner_id)
     if owner is None:
@@ -41,7 +49,7 @@ def _detail_page(
     )
     return render(
         request, session, "owner.html", {"owner": owner, "aliases": aliases},
-        error=error, status=status,
+        error=error, status=status, confirm=confirm,
     )  # fmt: skip
 
 
@@ -74,6 +82,7 @@ def create_owner(
         ),
         done="/owners",
         fail=lambda message, status: _list_page(request, session, error=message, status=status),
+        saved="dono-cadastrado",
     )
 
 
@@ -115,6 +124,8 @@ def update_owner(
         ),
         done=f"/owners/{owner_id}",
         fail=_detail_fail(request, session, owner_id),
+        saved="dono-salvo",
+        ref=owner_id,
     )
 
 
@@ -127,28 +138,85 @@ def add_alias(
         lambda: services.add_alias(session, owner_id, alias, actor=ACTOR),
         done=f"/owners/{owner_id}",
         fail=_detail_fail(request, session, owner_id),
+        saved="alias-adicionado",
     )
 
 
 @router.post("/owners/{owner_id}/aliases/{alias_id}/remover")
 def remove_alias(
-    request: Request, owner_id: int, alias_id: int, session: Session = Depends(get_session)
+    request: Request,
+    owner_id: int,
+    alias_id: int,
+    confirmar: Text = "",
+    session: Session = Depends(get_session),
 ) -> Response:
+    owner = session.get(Owner, owner_id)
+    row = session.get(OwnerAlias, alias_id)
+    if (
+        owner is not None
+        and row is not None
+        and row.owner_id == owner_id
+        and must_confirm(session, confirmar, destructive=True)
+    ):
+        return _detail_page(
+            request,
+            session,
+            owner_id,
+            confirm=confirmation(
+                before="Remover o alias ",
+                name=row.alias,
+                after=f" do dono {owner.nome_fantasia}?",
+                detail="O nome deixa de apontar para este dono, e não há desfazer. Para tê-lo "
+                "de volta, adicione o alias de novo.",
+                action=f"/owners/{owner_id}/aliases/{alias_id}/remover",
+                fields={},
+                button="Remover",
+                glyph="trash",
+                cancel=f"/owners/{owner_id}",
+            ),
+        )
     return mutate(
         session,
         lambda: services.remove_alias(session, owner_id, alias_id, actor=ACTOR),
         done=f"/owners/{owner_id}",
         fail=_detail_fail(request, session, owner_id),
+        saved="alias-removido",
+        ref=owner_id,
     )
 
 
 @router.post("/owners/{owner_id}/ativo")
 def toggle_owner(
-    request: Request, owner_id: int, ativo: Text = "0", session: Session = Depends(get_session)
+    request: Request,
+    owner_id: int,
+    ativo: Text = "0",
+    confirmar: Text = "",
+    session: Session = Depends(get_session),
 ) -> Response:
+    owner = session.get(Owner, owner_id)
+    if owner is not None and must_confirm(session, confirmar, destructive=ativo != "1"):
+        return _detail_page(
+            request,
+            session,
+            owner_id,
+            confirm=confirmation(
+                before="Desativar o dono ",
+                name=owner.nome_fantasia,
+                after="?",
+                detail="Ele fica inativo e não recebe documentos. O CNPJ, a pasta e os aliases "
+                "continuam com ele. Nada é apagado, e você pode ativá-lo de novo.",
+                action=f"/owners/{owner_id}/ativo",
+                fields={"ativo": "0"},
+                button="Desativar",
+                glyph="power",
+                cancel=f"/owners/{owner_id}",
+            ),
+        )
     return mutate(
         session,
         lambda: services.set_owner_active(session, owner_id, ativo == "1", actor=ACTOR),
         done=f"/owners/{owner_id}",
         fail=_detail_fail(request, session, owner_id),
+        saved="dono-ativado" if ativo == "1" else "dono-desativado",
+        ref=owner_id,
     )

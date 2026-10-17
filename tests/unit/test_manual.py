@@ -27,7 +27,7 @@ from osa.domain.errors import DomainError, UnsafePath
 from osa.panel import app as panel
 from osa.panel import manual
 from osa.panel.routes import common, owners
-from osa.panel.routes.common import parse_int
+from osa.panel.routes.common import parse_int, parse_telegram_id
 
 PORT = 8765
 LOOPBACK = ("127.0.0.1", 50000)
@@ -138,7 +138,11 @@ def test_the_manual_page_cannot_be_posted_to() -> None:
 def test_the_manual_has_no_script_style_or_handler_of_its_own() -> None:
     page = get_manual()
 
-    assert re.findall(r"<script\b[^>]*>", page) == ['<script src="/theme.js">']
+    assert re.findall(r"<script\b[^>]*>", page) == [
+        '<script src="/theme.js">',
+        '<script src="/assets/lottie.min.js" defer>',
+        '<script src="/motion.js" defer>',
+    ]
     assert "<style" not in page and " style=" not in page
     assert not re.search(r"\son\w+\s*=", page)
     assert "javascript:" not in page.lower()
@@ -418,7 +422,10 @@ def _refusals(tmp_path: Path) -> dict[str, Callable[[], object]]:
         "CNPJ alfanumérico não suportado nesta versão": lambda: owner_rules.normalize_cnpj(
             "12.ABC.345/0001-00"
         ),
-        "telegram_id deve ser um número inteiro": lambda: parse_int("abc", "telegram_id"),
+        (
+            "Telegram ID deve ser só números. Não é o telefone nem o @nome: peça o número "
+            "à própria pessoa."
+        ): lambda: parse_telegram_id("abc"),
         "telegram_id deve ser um inteiro positivo": lambda: services.create_user(
             None,  # type: ignore[arg-type]
             telegram_id=0,
@@ -560,6 +567,7 @@ def test_the_label_check_ignores_the_manual_and_the_help_blocks() -> None:
 
     assert "Cadastrar raiz" in templates  # still sees the real form
     assert "Remover apaga de verdade" not in templates  # owner.html help text is out
+    assert "Cadastrar usuário" in templates  # the new-user form is still seen when it is hidden
     assert "Ligar provedor externo” desmarcado" not in templates  # manual text is out
 
 
@@ -669,7 +677,7 @@ def test_the_code_side_list_is_complete_enough_to_mean_something() -> None:
     found = code_messages()
 
     for sample in ("nome inválido", "descrição inválido", "nome do modelo inválido",
-                   "raiz não encontrado", "alias não encontrado", "telegram_id deve ser um "
+                   "raiz não encontrado", "alias não encontrado", "departamento deve ser um "
                    "número inteiro", "nome de pasta excede 200 caracteres"):  # fmt: skip
         assert sample in found, sample
     assert "descrição é obrigatório" not in found  # optional field: never raised
@@ -750,3 +758,47 @@ def test_the_panel_pages_themselves_avoid_share_and_allowlist() -> None:
         assert PAGE_JARGON.findall(source) == [], template.name
     for notice in common.NOTICES.values():
         assert PAGE_JARGON.findall(notice) == [], notice
+
+
+# --- the manual follows the confirmation step and the named success banner ------------------
+
+
+def test_the_manual_describes_the_confirmation_before_removing_or_deactivating() -> None:
+    text = visible_text(get_manual())
+
+    assert "Antes de desativar ou remover, o painel pergunta" in text
+    assert "Cancelar" in text and "Só o botão de confirmar muda alguma coisa" in text
+    assert "não pede confirmação e não tem desfazer" not in text  # the old behaviour
+    assert "remover apaga de verdade" in text  # the warning title stays; the body changed
+    assert "Só depois de confirmar o nome é apagado" in text
+    for chapter_word in ("O painel pede uma confirmação, com o nome da raiz ou da pasta",
+                         "O painel pede uma confirmação com o nome do departamento",
+                         "“Desativar” pede uma confirmação com o nome da pessoa"):  # fmt: skip
+        assert chapter_word in text, chapter_word
+
+
+def test_the_manual_says_the_success_banner_names_the_item_and_errors_say_nothing_was_saved() -> (
+    None
+):
+    text = visible_text(get_manual())
+
+    assert "Departamento Fiscal salvo." in text
+    assert "Nada foi salvo." in text
+    assert "Não há mensagem de “salvo”" not in text  # the banner exists and is described
+    assert "O painel não mostra uma mensagem de “salvo”" not in text
+    assert "Alterações salvas" not in text
+
+
+def test_the_error_banner_context_line_is_what_the_manual_quotes() -> None:
+    base = (TEMPLATES / "base.html").read_text(encoding="utf-8")
+
+    assert "Nada foi salvo." in base
+
+
+def test_the_dependency_notice_and_the_hidden_form_are_explained() -> None:
+    text = visible_text(get_manual())
+
+    assert "Antes, cadastre um departamento no Template" in text
+    users = (TEMPLATES / "users.html").read_text(encoding="utf-8")
+    assert "Antes, cadastre um departamento no Template" in users
+    assert 'href="/departments"' in users

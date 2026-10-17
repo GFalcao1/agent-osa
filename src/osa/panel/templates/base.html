@@ -1,13 +1,17 @@
-{% from "_ui.html" import icon with context -%}
-{% set nav = [("index", "/", "Início", "home"), ("roots", "/roots", "Raízes", "drive"), ("departments", "/departments", "Template", "stack"), ("owners", "/owners", "Donos", "building"), ("users", "/users", "Usuários", "users"), ("model", "/model", "Modelo", "chip"), ("manual", "/manual", "Manual", "book")] -%}
+{% set nav = [("index", "/", "Início", "house"), ("roots", "/roots", "Raízes", "hard-drives"), ("departments", "/departments", "Template", "list-numbers"), ("owners", "/owners", "Donos", "buildings"), ("users", "/users", "Usuários", "users"), ("model", "/model", "Modelo", "cpu"), ("manual", "/manual", "Manual", "book-open")] -%}
 <!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Painel{% endblock %} — Agent O.S.A.</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  {% for font in preload_fonts %}<link rel="preload" href="{{ font_url(font) }}" as="font" type="font/woff2" crossorigin>
+  {% endfor %}
   <link rel="stylesheet" href="/panel.css">
   <script src="/theme.js"></script>
+  <script src="/assets/lottie.min.js" defer></script>
+  <script src="/motion.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#conteudo">Pular para o conteúdo</a>
@@ -23,22 +27,25 @@
   </a>
   <nav class="nav" aria-label="Seções do painel">
     {% for key, href, label, glyph in nav %}
-    <a href="{{ href }}"{% if loop.last %} class="nav-help"{% endif %}{% if key == section %} aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
+    <a href="{{ href }}"{% if loop.last %} class="nav-help"{% endif %}{% if key == section %} aria-current="page"{% endif %}><span class="nav-ico">{{ icon(glyph, "fill" if key == section else "regular") }}</span><span>{{ label }}</span></a>
     {% endfor %}
   </nav>
   <div class="side-foot">
-    <span class="side-label">Tema</span>
-    <button type="button" class="theme-switch" aria-pressed="false" aria-label="Alternar tema claro/escuro" title="Alternar tema claro/escuro">
-      <span class="knob" aria-hidden="true"></span>
-      {{ icon("sun", "sun") }}{{ icon("moon", "moon") }}
-    </button>
+    <p class="access-badge">{{ icon("lock", "duotone") }}<span>Somente nesta máquina<span class="sep"> · </span><code>127.0.0.1</code></span></p>
+    <div class="side-switch">
+      <span class="side-label">Tema</span>
+      <button type="button" class="theme-switch" aria-pressed="false" aria-label="Alternar tema claro/escuro" title="Alternar tema claro/escuro">
+        <span class="knob" aria-hidden="true"><span class="knob-art" data-lottie="theme" data-lottie-mode="theme"></span></span>
+        {{ icon("sun", "regular", "sun") }}{{ icon("moon", "regular", "moon") }}
+      </button>
+    </div>
   </div>
 </header>
 <div class="page">
 <main id="conteudo">
   {% if not bootstrapped %}
   <div class="alert alert-blocked" role="status">
-    {{ icon("lock") }}
+    {{ icon("lock", "duotone") }}
     <div>
       <strong class="alert-title">Cadastro bloqueado</strong>
       <p>Nenhum administrador cadastrado. Rode <code>osa admin bootstrap</code>
@@ -47,14 +54,35 @@
   </div>
   {% endif %}
   {% if error %}
-  <div class="alert alert-error" role="alert">{{ icon("alert") }}<p>{{ error }}</p></div>
+  <div class="alert alert-error" role="alert">{{ icon("x-circle", "duotone") }}<div><p>{{ error }}</p><p class="alert-note">Nada foi salvo.</p></div></div>
+  {% endif %}
+  {% if success %}
+  <div class="alert alert-success" role="status">
+    <span class="alert-art" data-lottie="check" data-lottie-mode="once">{{ icon("check-circle", "duotone") }}</span>
+    <p>{{ success.before }}<strong>{{ success.name }}</strong>{{ success.after }}</p>
+  </div>
   {% endif %}
   {% if notice %}
-  <div class="alert alert-info" role="status">{{ icon("info") }}<p>{{ notice }}</p></div>
+  <div class="alert alert-info" role="status">{{ icon("info", "duotone") }}<p>{{ notice }}</p></div>
+  {% endif %}
+  {% if confirm %}
+  <section class="confirm" role="alert" aria-labelledby="confirm-title">
+    <p class="confirm-title" id="confirm-title">{{ confirm.before }}<strong>{{ confirm.name }}</strong>{{ confirm.after }}</p>
+    <p>{{ confirm.detail }}</p>
+    <div class="confirm-actions">
+      <form method="post" action="{{ confirm.action }}">
+        {% include "_csrf.html" %}
+        {% for field_name, field_value in confirm.fields.items() %}<input type="hidden" name="{{ field_name }}" value="{{ field_value }}">{% endfor %}
+        <input type="hidden" name="confirmar" value="1">
+        <button type="submit" class="btn btn-confirm">{{ icon(confirm.icon) }}{{ confirm.button }}</button>
+      </form>
+      <a class="btn btn-quiet" href="{{ confirm.cancel }}" autofocus>Cancelar</a>
+    </div>
+  </section>
   {% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="footer">Painel local &middot; 127.0.0.1</footer>
+<footer class="footer">{{ icon("lock", "duotone") }}Somente nesta máquina · <code>127.0.0.1</code></footer>
 </div>
 </div>
 </body>

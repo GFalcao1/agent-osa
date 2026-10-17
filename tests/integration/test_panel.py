@@ -164,10 +164,15 @@ def test_the_form_cannot_create_an_admin(web: Panel) -> None:
 
 def _user_form_department(html: str, user_id: int) -> tuple[str, str]:
     """(value, label) of the department option the browser would submit for this user."""
-    form = re.search(rf'<form method="post" action="/users/{user_id}">(.*?)</form>', html, re.S)
-    assert form, "edit form missing"
-    select_html = re.search(r'<select name="departamento_id">(.*?)</select>', form.group(1), re.S)
-    assert select_html
+    # The row's controls sit in separate table cells and are tied to its (empty) form with the
+    # form="usr-<id>" attribute; the form itself only carries the action and the token.
+    assert re.search(
+        rf'<form class="row-form" id="usr-{user_id}" method="post" action="/users/{user_id}"', html
+    )
+    select_html = re.search(
+        rf'<select name="departamento_id" form="usr-{user_id}"[^>]*>(.*?)</select>', html, re.S
+    )
+    assert select_html, "edit select missing"
     options = re.findall(
         r'<option value="(\d+)"\s*(selected)?\s*>([^<]*)</option>', select_html.group(1)
     )
@@ -184,7 +189,7 @@ def test_editing_a_user_of_an_inactive_department_keeps_that_department(web: Pan
     web.post(
         "/users", telegram_id="3003", nome="Ana", papel="operator", departamento_id=str(fiscal.id)
     )
-    web.post(f"/departments/{fiscal.id}/ativo", ativo="0")
+    web.post(f"/departments/{fiscal.id}/ativo", ativo="0", confirmar="1")
     with web.db() as session:
         user = session.scalars(select(User).where(User.telegram_id == 3003)).one()
 
@@ -206,7 +211,7 @@ def test_editing_a_user_of_an_inactive_department_keeps_that_department(web: Pan
 def test_the_last_admin_cannot_be_deactivated_from_the_panel(web: Panel) -> None:
     admin_id = bootstrap(web)
 
-    body = web.post(f"/users/{admin_id}/ativo", status=409, ativo="0")
+    body = web.post(f"/users/{admin_id}/ativo", status=409, ativo="0", confirmar="1")
 
     assert "último administrador" in body
     with web.db() as session:
@@ -341,7 +346,7 @@ def test_owner_page_edits_aliases(web: Panel) -> None:
     assert "alpha ltda" in html
     with web.db() as session:
         alias = session.scalars(select(OwnerAlias).where(OwnerAlias.alias == "alpha ltda")).one()
-    web.post(f"/owners/{owner.id}/aliases/{alias.id}/remover")
+    web.post(f"/owners/{owner.id}/aliases/{alias.id}/remover", confirmar="1")
     assert "alpha ltda" not in web.get(f"/owners/{owner.id}")
     web.get("/owners/999999", status=404)
 
@@ -356,10 +361,11 @@ def test_changing_a_department_folder_shows_the_not_renamed_notice(web: Panel) -
         f"/departments/{department.id}", nome="Fiscal", pasta="Tributos", usa_ano="on"
     )
 
-    assert location == "/departments?aviso=pastas"
-    assert "não foram renomeadas" in web.get(location)
+    assert location == f"/departments?ok=departamento-salvo&id={department.id}&aviso=pastas"
+    page = web.get(location)
+    assert "não foram renomeadas" in page and "Departamento <strong>Fiscal</strong> salvo." in page
     web.post(f"/departments/{department.id}/mover", direcao="up")
-    web.post(f"/departments/{department.id}/ativo", ativo="0")
+    web.post(f"/departments/{department.id}/ativo", ativo="0", confirmar="1")
     with web.db() as session:
         assert session.scalars(select(Department)).one().ativo is False
 
@@ -398,7 +404,7 @@ def test_user_form_never_offers_admin_and_validates_numbers(web: Panel) -> None:
         departamento_id=str(department.id),
     )  # fmt: skip
 
-    assert "telegram_id deve ser um número inteiro" in body
+    assert "Telegram ID deve ser só números" in body and "peça o número à própria pessoa" in body
     assert "não-é-número" not in body
 
 
@@ -439,12 +445,24 @@ def test_every_page_loads_the_theme_script_and_has_the_switch(web: Panel) -> Non
     for path in (*NAV_SECTIONS, f"/owners/{owner_id}"):
         html = web.get(path)
 
-        # One external script, from the panel itself, in <head>, blocking (no defer/async).
-        assert re.findall(r"<script\b[^>]*>", html) == ['<script src="/theme.js">']
+        # Three external scripts, all from the panel itself, all in <head>: theme.js blocks
+        # (the saved theme applies before the first paint); the Lottie library and motion.js
+        # are deferred and run in that order. No inline script anywhere.
+        scripts = (
+            '<script src="/theme.js"></script>',
+            '<script src="/assets/lottie.min.js" defer></script>',
+            '<script src="/motion.js" defer></script>',
+        )
+        assert re.findall(r"<script\b[^>]*>", html) == [tag[: -len("</script>")] for tag in scripts]
         head = html.split("</head>")[0]
-        assert '<script src="/theme.js"></script>' in head
+        assert all(tag in head for tag in scripts)
         assert head.index("/panel.css") < head.index("/theme.js")
-        assert "</script>" not in html.replace('<script src="/theme.js"></script>', "")
+        assert [head.index(tag) for tag in scripts] == sorted(head.index(tag) for tag in scripts)
+        assert '<link rel="icon" type="image/svg+xml" href="/favicon.svg">' in head
+        remainder = html
+        for tag in scripts:
+            remainder = remainder.replace(tag, "")
+        assert "</script>" not in remainder
         assert " style=" not in html and "<style" not in html
         assert not re.search(r"\son\w+\s*=", html)  # no inline event handler
         # The switch: a real button, labelled, with both icons, on every page.
@@ -459,7 +477,7 @@ def test_every_page_loads_the_theme_script_and_has_the_switch(web: Panel) -> Non
         # The sidebar nav lists every section once, with an icon.
         nav = re.search(r'<nav class="nav".*?</nav>', html, re.S)
         assert nav
-        links = re.findall(r'<a href="([^"]+)"[^>]*><svg', nav.group(0))
+        links = re.findall(r'<a href="([^"]+)"[^>]*><span class="nav-ico"><svg', nav.group(0))
         assert links == list(NAV_SECTIONS)
 
 
@@ -468,3 +486,68 @@ def test_the_home_notice_and_blocked_state_survive_the_sidebar_layout(web: Panel
     assert "não tem autenticação própria" in home and "só é alcançável nesta" in home
     assert "osa admin bootstrap" in home
     assert 'class="alert alert-blocked"' in home
+
+
+def test_a_saved_change_redirects_with_a_code_and_shows_the_success_flash(web: Panel) -> None:
+    bootstrap(web)
+
+    location = web.post("/departments", nome="Fiscal Ficticio")
+
+    with web.db() as session:
+        department = session.scalars(select(Department)).one()
+    assert location == f"/departments?ok=departamento-adicionado&id={department.id}"
+    page = web.get(location)
+    assert '<div class="alert alert-success" role="status">' in page
+    assert '<span class="alert-art" data-lottie="check" data-lottie-mode="once">' in page
+    assert "Departamento <strong>Fiscal Ficticio</strong> adicionado." in page
+    assert "Alterações salvas" not in page
+    # The same page without the code, or with any other value, has no flash.
+    assert "alert-success" not in web.get("/departments")
+    assert "alert-success" not in web.get("/departments?ok=1")
+    assert "alert-success" not in web.get("/departments?ok=%3Cscript%3E")
+
+
+def test_the_pastas_warning_comes_with_the_success_flash_in_one_redirect(web: Panel) -> None:
+    bootstrap(web)
+    web.post("/departments", nome="Fiscal Ficticio")
+    with web.db() as session:
+        department = session.scalars(select(Department)).one()
+
+    location = web.post(
+        f"/departments/{department.id}", nome="Fiscal Ficticio", pasta="outra-pasta"
+    )
+
+    assert location.endswith("&aviso=pastas")
+    page = web.get(location)
+    assert "alert-info" in page and "Departamento <strong>Fiscal Ficticio</strong> salvo." in page
+
+
+def test_a_refusal_never_shows_the_success_flash(web: Panel, tmp_path: Path) -> None:
+    bootstrap(web)
+    web.post("/departments", nome="Fiscal Ficticio")
+
+    body = web.post(
+        "/roots?ok=departamento-salvo&id=1", status=400,
+        caminho=str(tmp_path / "nao-existe"), descricao="",
+    )  # fmt: skip
+
+    assert "alert alert-error" in body and "alert-success" not in body
+    assert "Nada foi salvo." in body
+
+
+def test_every_page_marks_the_hooks_of_the_micro_interactions(web: Panel) -> None:
+    bootstrap(web)
+    for path in NAV_SECTIONS:
+        html = web.get(path)
+
+        assert html.count('class="knob-art" data-lottie="theme" data-lottie-mode="theme"') == 1
+        assert len(re.findall(r'<span class="nav-ico">', html)) == len(NAV_SECTIONS)
+        # The brand mark is the static hand-drawn shield: no animation hook, on any page.
+        assert "breathe" not in html and "brand-mark" not in html
+        assert '<a class="brand" href="/">\n    <svg viewBox="0 0 32 32"' in html
+        # Every submit button carries a decorative icon the spinner can take the place of.
+        for button in re.findall(r'<button type="submit"[^>]*>.*?</button>', html, re.S):
+            assert button.split(">", 1)[1].startswith('<svg class="icon"'), button
+        # No other Lottie hook than the declared ones.
+        names = set(re.findall(r'data-lottie="([a-z]+)"', html))
+        assert names <= {"check", "theme"}, names

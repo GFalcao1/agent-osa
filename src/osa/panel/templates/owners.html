@@ -1,18 +1,21 @@
 {% extends "base.html" %}
-{% from "_ui.html" import badge, empty, help_block with context %}
+{% from "_ui.html" import badge, empty, help_block, field with context %}
 {% set section = "owners" %}
 {% block title %}Donos{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Donos</h1></div>
+  <p class="eyebrow">Passo 3 de 5</p>
+  <h1>Donos</h1>
+  <p class="lead">As empresas ou pessoas a quem os documentos pertencem. Cada dono tem a sua árvore de pastas.</p>
 </header>
 {% call help_block("donos") %}Dono é a empresa ou a pessoa a quem os documentos pertencem. Preencha ao menos o nome fantasia e clique em Cadastrar dono. Clique no nome de um dono na lista para ajustar os dados e os nomes alternativos, que na tela aparecem como “alias”.{% endcall %}
 <div class="split split-table">
 <section class="card flush">
   {% if owners %}
-  <table class="stack-sm">
+  <div class="table-wrap">
+  <table class="stack-md">
     <thead>
-      <tr><th>Nome fantasia</th><th>Razão social</th><th>CNPJ</th><th>Pasta</th><th>Situação</th></tr>
+      <tr><th scope="col">Nome fantasia</th><th scope="col">Razão social</th><th scope="col">CNPJ</th><th scope="col">Pasta</th><th scope="col">Situação</th></tr>
     </thead>
     <tbody>
       {% for owner in owners %}
@@ -26,25 +29,28 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
-  {{ empty("Nenhum dono cadastrado.", "Cadastre o primeiro dono; cada dono recebe o template de departamentos." if bootstrapped else "") }}
+  {{ empty("Nenhum dono cadastrado.", "Cada dono recebe o template de departamentos como pastas." if bootstrapped else "", "#novo-dono" if bootstrapped else "", "Cadastrar o primeiro dono") }}
   {% endif %}
 </section>
 {% if bootstrapped %}
-<form class="card aside" method="post" action="/owners">
+<form class="card aside" id="novo-dono" method="post" action="/owners">
   {% include "_csrf.html" %}
   <fieldset>
     <legend>Novo dono</legend>
     <div class="form-grid">
-      <label>Nome fantasia <input type="text" name="nome_fantasia" required></label>
-      <label>Razão social <input type="text" name="razao_social"></label>
-      <label>CNPJ (opcional, com ou sem máscara) <input type="text" name="cnpj"></label>
-      <label>Nome da pasta (vazio: derivado do nome fantasia) <input type="text" name="pasta"></label>
-      <label class="wide">Aliases (um por linha) <textarea name="aliases" rows="3"></textarea></label>
-      <p class="help wide">Nome fantasia e razão social também viram aliases. Alias repetido em
-        outro dono é recusado.</p>
+      {{ field("novo-dono-nome", "nome_fantasia", "Nome fantasia", hint="obrigatório", required=true) }}
+      {{ field("novo-dono-razao", "razao_social", "Razão social", hint="opcional") }}
+      {{ field("novo-dono-cnpj", "cnpj", "CNPJ", hint="opcional, com ou sem máscara", inputmode="numeric", pattern="[0-9A-Za-z.\\/\\- ]*", title="Números, com ou sem pontos, barra e traço") }}
+      {{ field("novo-dono-pasta", "pasta", "Nome da pasta", hint="vazio: usa o nome fantasia") }}
+      <div class="field wide">
+        <div class="label-row"><label for="novo-dono-aliases">Aliases</label><span class="hint" id="novo-dono-aliases-hint">um por linha</span></div>
+        <textarea id="novo-dono-aliases" name="aliases" rows="3" aria-describedby="novo-dono-aliases-hint novo-dono-aliases-help"></textarea>
+        <p class="help" id="novo-dono-aliases-help">Nome fantasia e razão social também viram aliases. Um alias já usado por outro dono é recusado.</p>
+      </div>
     </div>
-    <div class="form-actions"><button type="submit" class="btn btn-primary">Cadastrar dono</button></div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon("plus") }}Cadastrar dono</button></div>
   </fieldset>
 </form>
 {% endif %}

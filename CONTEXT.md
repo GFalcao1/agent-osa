@@ -45,6 +45,10 @@ Arquivo da pasta monitorada cujo tamanho e mtime não mudaram por dois ciclos e 
 Página web local de configuração (FastAPI + HTML) em `127.0.0.1:8765`. Sem autenticação própria na V1: só é alcançável na máquina (ADR-0005). Cadastra raízes, pastas monitoradas, template, donos, usuários e modelo; nunca cria o primeiro administrador.
 _Evitar_: dashboard, console, backoffice
 
+**Confirmação**:
+Passo que o painel coloca antes de desativar um item ou remover um alias: o primeiro envio devolve a mesma página com uma faixa que nomeia o item e dois botões (confirmar e cancelar), e só o envio com `confirmar=1` altera o cadastro. Ativar não pede confirmação.
+_Evitar_: diálogo, aviso
+
 **Manual de uso**:
 Página de ajuda embutida no painel (`/manual`), em português simples, para quem opera o painel sem ser técnico: ordem de configuração, um capítulo por seção, glossário, problemas comuns, segurança e quando chamar o responsável técnico. Estática, sempre alcançável (também sem administrador e com cadastro vazio) e sem tocar o banco; cada página do painel tem um bloco "Como usar esta página" que leva ao capítulo certo. As frases de recusa que ela cita são conferidas por teste contra o código que as gera.
 _Evitar_: README do operador, tutorial, wiki
