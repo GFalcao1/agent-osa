@@ -1,0 +1,214 @@
+{
+  "schema": 1,
+  "sources": {
+    "phosphor": {
+      "package": "@phosphor-icons/core",
+      "version": "2.1.1",
+      "integrity": "sha512-v4ARvrip4qBCImOE5rmPUylOEK4iiED9ZyKjcvzuezqMaiRASCHKcRIuvvxL/twvLpkfnEODCOJp5dM4eZilxQ==",
+      "license": "MIT",
+      "url": "https://github.com/phosphor-icons/core"
+    },
+    "plex-sans": {
+      "package": "@fontsource-variable/ibm-plex-sans",
+      "version": "5.3.0",
+      "integrity": "sha512-agG8tXFEo0hD9+J7npa4vbbWult52eMLVaQ6WQRlhs/iCAojrMAoejru85W9HTVXHfyUj96KM7gp/KGAS87XaQ==",
+      "license": "OFL-1.1",
+      "url": "https://github.com/IBM/plex",
+      "font_version": "3.201"
+    },
+    "plex-serif": {
+      "package": "@fontsource/ibm-plex-serif",
+      "version": "5.3.0",
+      "integrity": "sha512-zwPfHB7EJbS5B8qnitPigJYzNdnt6PUeaoOA1gAAt//1pjpTVZN5sOU14NIAZ+C1xypL6GWsUG2VMYJW9bhJqQ==",
+      "license": "OFL-1.1",
+      "url": "https://github.com/IBM/plex",
+      "font_version": "2.6"
+    },
+    "plex-mono": {
+      "package": "@fontsource/ibm-plex-mono",
+      "version": "5.3.0",
+      "integrity": "sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==",
+      "license": "OFL-1.1",
+      "url": "https://github.com/IBM/plex",
+      "font_version": "2.3"
+    },
+    "lottie": {
+      "package": "lottie-web",
+      "version": "5.13.0",
+      "integrity": "sha512-+gfBXl6sxXMPe8tKQm7qzLnUy5DUPJPKIyRHwtpCpyUEYjHYRJC/5gjUvdkuO2c3JllrPtHXH5UJJK8LRYl5yQ==",
+      "license": "MIT",
+      "url": "https://github.com/airbnb/lottie-web",
+      "file": "build/player/lottie_light.min.js"
+    }
+  },
+  "files": {
+    "favicon.svg": {
+      "sha256": "f9f1afc22c35ef5d1b4f7fb0be6228db212aa178957ff3cec5403f3b45420a1b",
+      "origin": "own"
+    },
+    "fonts/OFL-ibm-plex-mono.txt": {
+      "sha256": "23b0a9d0c6d3f140a0b77e483c5cfa6bba574325ef5cb189ed9f2fec4884533f",
+      "origin": "plex-mono-licence"
+    },
+    "fonts/OFL-ibm-plex-sans.txt": {
+      "sha256": "d0283623ef57e722fd0eb688a8041589670c608ab780cd3612d06ba6f153d3fd",
+      "origin": "plex-sans-licence"
+    },
+    "fonts/OFL-ibm-plex-serif.txt": {
+      "sha256": "b9e9c867b084f43f2bf0284808dbf394b5a027200577c246f2ac4fe2711da416",
+      "origin": "plex-serif-licence"
+    },
+    "fonts/ibm-plex-mono-latin-400-normal.woff2": {
+      "sha256": "08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7",
+      "origin": "plex-mono"
+    },
+    "fonts/ibm-plex-sans-latin-ext-wght-normal.woff2": {
+      "sha256": "d160e20920ae4d6556518d352d3af27a74e9b0de3d8fe17b1c1044fc75aa2f81",
+      "origin": "plex-sans"
+    },
+    "fonts/ibm-plex-sans-latin-wght-normal.woff2": {
+      "sha256": "e2291e842cf5af167122a22881a740c7f2dda7716f1e8cd76680264f4a859470",
+      "origin": "plex-sans"
+    },
+    "fonts/ibm-plex-serif-latin-600-normal.woff2": {
+      "sha256": "e279e4f8baa0d4634d98868092f2198ae0dcd9e142c935822c385b9843352a9b",
+      "origin": "plex-serif"
+    },
+    "fonts/ibm-plex-serif-latin-ext-600-normal.woff2": {
+      "sha256": "3c56fe27718921294dd8573acbe5a2822d34dd55f5313437514e8bb33e00a6b7",
+      "origin": "plex-serif"
+    },
+    "icons/arrow-down.svg": {
+      "sha256": "cc6416ae83e20660f14b11f5525c6d05ee679c3f26cee41b696cb37aa905d4f5",
+      "origin": "phosphor"
+    },
+    "icons/arrow-left.svg": {
+      "sha256": "3c2001cf957d182fc54927e4b286cc8cf66dd97830f441ca2650d42a63a9006a",
+      "origin": "phosphor"
+    },
+    "icons/arrow-right.svg": {
+      "sha256": "e45bc4a12592b8723110db42c6deffdf177e4fe7704cf50324963fa0a59b2d74",
+      "origin": "phosphor"
+    },
+    "icons/arrow-up.svg": {
+      "sha256": "361aa9f9c52a759bf598faf6ed38ccd426f949f541d662c65b5b5d868fa76980",
+      "origin": "phosphor"
+    },
+    "icons/book-open-fill.svg": {
+      "sha256": "869e2b75ba601a2915731ac86a52b72110da309b048173ff45400e75e37799ce",
+      "origin": "phosphor"
+    },
+    "icons/book-open.svg": {
+      "sha256": "b38cdb3a15dcf00cfa4811e318b021e25c6a87b47acbb11888e16d107a5642da",
+      "origin": "phosphor"
+    },
+    "icons/buildings-fill.svg": {
+      "sha256": "887859507bd2d8e88416f359c5bd42ca23ebb63141a71c3276fca8e31d3cf252",
+      "origin": "phosphor"
+    },
+    "icons/buildings.svg": {
+      "sha256": "76f3325b87588fc6786953e8b964d5b7cae58983b3dc1399f7b7a672a6c1b553",
+      "origin": "phosphor"
+    },
+    "icons/check-circle-duotone.svg": {
+      "sha256": "d9c7016e83a81c8ef1a250a307acc6d29d5c492fc46066ab5e5e7446a65b48f6",
+      "origin": "phosphor"
+    },
+    "icons/cpu-fill.svg": {
+      "sha256": "03265526233e4f07528aee24d2dee2b0a70e9c080c7cc22b9066486fe62c4b10",
+      "origin": "phosphor"
+    },
+    "icons/cpu.svg": {
+      "sha256": "fd4084e582bc555e794d82934ee90330542a837d56a9f3fb365aa0b9f2e0d599",
+      "origin": "phosphor"
+    },
+    "icons/floppy-disk.svg": {
+      "sha256": "067b385ee62469be500d2d5bcd10e2aedd7529cd615ed180fa8414aaef0e40ab",
+      "origin": "phosphor"
+    },
+    "icons/hard-drives-fill.svg": {
+      "sha256": "16f26a807a05ded561ff3322879e698b70d77f07df5dabda451825ddd8f5ba28",
+      "origin": "phosphor"
+    },
+    "icons/hard-drives.svg": {
+      "sha256": "c4ba6f3519182785a6b99d04d2d0fdbbb0bcb54f1e3c916c49e1af59ea77b6f2",
+      "origin": "phosphor"
+    },
+    "icons/house-fill.svg": {
+      "sha256": "4783cdf0ae5f5ec363df6f77167a41642aac42fe8d73251b9a61232ab43f355d",
+      "origin": "phosphor"
+    },
+    "icons/house.svg": {
+      "sha256": "180e9259e99e23da197b59b19394d006d6a5d33e384cc2b9c8381cb0214a5716",
+      "origin": "phosphor"
+    },
+    "icons/info-duotone.svg": {
+      "sha256": "dec9ea1394c618d6d576ba43e0f08eea265eaf20046e98bc3da19eb4b8da73e8",
+      "origin": "phosphor"
+    },
+    "icons/list-numbers-fill.svg": {
+      "sha256": "0e5c2c78efea6b9f5de6876d1a28ebfbce0c18aa5885be9b4bb69cd25dc26b74",
+      "origin": "phosphor"
+    },
+    "icons/list-numbers.svg": {
+      "sha256": "fe27bfeb346c8ffd2ca61805d800f60c58b2cd0512e7d58f1b8ccffdad777ccc",
+      "origin": "phosphor"
+    },
+    "icons/lock-duotone.svg": {
+      "sha256": "08412a11cc0ebb4d842904f2930ebdf66d12439e95bfe6c5a7174505c0280149",
+      "origin": "phosphor"
+    },
+    "icons/moon.svg": {
+      "sha256": "5c91f82aea4e7b53305bf29628caebc22a1198ba9fa46c62eef13fb8b3c3f21d",
+      "origin": "phosphor"
+    },
+    "icons/plus.svg": {
+      "sha256": "d688feb9dd2e41c1721d6906a05a2a42e18cd774762fe706d72b2bdfd91cddc4",
+      "origin": "phosphor"
+    },
+    "icons/power.svg": {
+      "sha256": "7c493f7a807a08a5fcaadd33493fd4ad66cb0aa752a822c71a5f5cf5fd665b53",
+      "origin": "phosphor"
+    },
+    "icons/sun.svg": {
+      "sha256": "8df1c7b747774f8b2c1fe353b1b785c74aac35bfa50f2ed7d8d9a85a4191b2ac",
+      "origin": "phosphor"
+    },
+    "icons/trash.svg": {
+      "sha256": "e6a830c0409f9e101e3695c981eef98427d39fd01f502b9cbd6900930b01f19c",
+      "origin": "phosphor"
+    },
+    "icons/users-fill.svg": {
+      "sha256": "6104c0634ed5b574e261acc05a3575db8abfb4ccbcb3bf12f5359a431303783b",
+      "origin": "phosphor"
+    },
+    "icons/users.svg": {
+      "sha256": "b3385e4c6aa03f7e16d1b03887c2cdff9900f5a7edbd5ea5176055938ccfb908",
+      "origin": "phosphor"
+    },
+    "icons/warning-duotone.svg": {
+      "sha256": "5ae0c2cd3e764e0e82f03685657353b65499d6b231745af8516c140e8b1ba4af",
+      "origin": "phosphor"
+    },
+    "icons/x-circle-duotone.svg": {
+      "sha256": "62a1dc9fb293f84fd6671cc44ebeecbea30a52a671264d2a737b3e687d3d601f",
+      "origin": "phosphor"
+    },
+    "lottie/check.json": {
+      "sha256": "65e6a11008d3ee131964c42d600dba4418b134d0b7a43f5bf267db574a8838b7",
+      "origin": "generator"
+    },
+    "lottie/spinner.json": {
+      "sha256": "e7f222f6ae28fbeddc54ef99ca0b2806293e08dd6e7a122480e527d9877c80aa",
+      "origin": "generator"
+    },
+    "lottie/theme.json": {
+      "sha256": "36f8fc8d336da4b180b320d7371729b760862fc5373b81c2693d7044e9dc25cb",
+      "origin": "generator"
+    },
+    "vendor/lottie_light.min.js": {
+      "sha256": "9588432bec30c8ef8200bac4a67d8aaad881047bc2a6c9fa624d90ec96402410",
+      "origin": "lottie"
+    }
+  }
+}

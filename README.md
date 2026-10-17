@@ -83,3 +83,96 @@ uv run pytest -q
 Trabalho em uma task por vez, conforme `AGENTS.md`. Suites `integration`,
 `native` e `live` dependem de PostgreSQL descartável, share SMB de teste e
 Ollama, respectivamente, e só rodam quando configuradas.
+
+## Ícones, fontes e animações do painel
+
+O painel não carrega nada de fora: ícones, fontes, animações e scripts são
+arquivos do próprio pacote, servidos pelo painel com os mesmos filtros e
+cabeçalhos de segurança do restante (a CSP não muda). Licenças em
+`THIRD_PARTY_NOTICES.md`.
+
+- **Ícones**: SVGs do Phosphor Icons (`@phosphor-icons/core`, MIT), só os que
+  as telas usam, em `src/osa/panel/static/icons/`. Os templates chamam
+  `{{ icon("house") }}` ou `{{ icon("lock", "duotone") }}`; o nome vem do
+  template, nunca da requisição, e um nome fora do conjunto levanta erro.
+- **Marca**: o escudo do cabeçalho e o `favicon.svg` são desenho próprio (não Phosphor);
+  sem JavaScript, a marca faz um "pop" curto, em CSS, ao passar o mouse, focar ou
+  clicar; com JavaScript, `/motion.js` troca o pop por uma mola que segue o
+  ponteiro só enquanto ele está sobre a marca (e afunda de leve no clique). Com
+  `prefers-reduced-motion: reduce` nada se mexe.
+- **Animações**: três arquivos Lottie pequenos (check de sucesso, spinner do botão e
+  sol/lua do tema), gerados por
+  `tools/lottie/generate.py` (`uv run python tools/lottie/generate.py`), tocados
+  pelo `lottie-web` na versão leve (sem motor de expressões) e orquestrados por
+  `/motion.js`. Ao abrir uma página, os blocos entram com um "pop" curto e
+  escalonado (menos de 0,7 s, só CSS) e o ícone da seção atual dá um pop; os ícones
+  do menu também dão um pop (só escala, sem giro nem brilho) ao passar o mouse, ao
+  focar e no clique. O fundo é uma
+  retícula fina com lavagens suaves de cor, uma camada por tema. Cartões e faixas têm sombra
+  suave em camadas e um filete dourado no alto, que se alarga quando um cartão com link sobe
+  de leve sob o mouse; botões principais e os círculos numerados do manual têm um anel
+  dourado fino por dentro. Cantos quase retos: 2 px em controles, selos e etiquetas, 3 px
+  em alertas e caixas pequenas, 4 px em cartões; só a bolinha da chave de tema é redonda. São melhoria progressiva: sem
+  JavaScript, ou se um arquivo não carregar, a tela mostra o ícone estático e o
+  texto. Com `prefers-reduced-motion: reduce` nada toca nem repete; a preferência
+  é seguida na hora, sem recarregar. O mesmo `/motion.js` destaca o botão
+  "Salvar" de uma linha de tabela só enquanto algum campo dela mudou.
+- **Manifesto**: `src/osa/panel/static/MANIFEST.json` guarda versão, hash de
+  integridade do registro npm e o sha256 de cada arquivo entregue. O painel
+  confere tudo (inclusive cada ícone e cada fonte) ao iniciar e recusa subir se um
+  arquivo falta ou não bate com o manifesto.
+
+### Fontes e tipografia
+
+Texto, controles e interface usam **IBM Plex Sans** (variável; o painel usa os pesos
+400, 500 e 600); títulos de página, títulos de cartão, legendas de formulário e os
+números da página inicial usam **IBM Plex Serif** (peso 600); pastas e códigos usam
+**IBM Plex Mono** (peso 400). As três têm licença SIL OFL 1.1 (texto completo e
+linhas de copyright em `THIRD_PARTY_NOTICES.md`); nenhuma declara Reserved Font Name
+(nem no cabeçalho da licença nem na linha de copyright gravada na fonte) e os
+arquivos WOFF2 são os dos pacotes `@fontsource`, copiados sem alteração, com o texto
+da licença ao lado em `src/osa/panel/static/fonts/`.
+
+- **Uma chave**: `DISPLAY` em `src/osa/panel/styles.py`. `"serif"` (padrão) põe a
+  serifada nos títulos e números; `"sans"` deixa tudo em IBM Plex Sans. A serifada
+  nunca vai para texto pequeno de interface nem para campos de formulário.
+- **Tamanho**: no primeiro carregamento vão só os arquivos latinos: 45 712 B (Sans),
+  20 516 B (Serif) e 14 708 B (Mono), cerca de 79 KB (61 KB com `"sans"`); os
+  latinos estendidos da Sans (30 964 B) e da Serif (15 560 B) só descem quando uma
+  página usa um desses caracteres (`unicode-range`). O navegador só baixa uma face
+  que a página usa.
+- **Rota**: `/fonts/<nome>.<hash>.woff2`, uma rota de caminho exato por arquivo, sob
+  os mesmos filtros de peer e `Host`. O hash são os dez primeiros dígitos do sha256
+  do arquivo, lidos do manifesto; por isso essas cinco respostas, e só elas, saem com
+  `Cache-Control: private, max-age=31536000, immutable`. Todo o resto continua
+  `no-store`.
+- **CSS**: nenhuma diretiva `font-src` (cai em `default-src 'self'`); `@font-face`
+  com `font-display: swap`, `<link rel="preload">` da Sans e (com `"serif"`) da
+  Serif, e uma face de reserva por família com as métricas da fonte (Arial, Georgia
+  e Courier New ajustadas; sem salto de layout). Família, escala, três pesos,
+  entrelinhas e espaçamento de letras são variáveis CSS; um teste recusa qualquer
+  fonte, tamanho ou peso escrito fora delas.
+
+Atualizar uma fonte (precisa de Node/npm e rede): troque a versão e a integridade do
+pacote (`npm view @fontsource-variable/ibm-plex-sans@<versão> dist.integrity`, e o
+mesmo para `@fontsource/ibm-plex-serif` e `@fontsource/ibm-plex-mono`) em `PINS` de
+`tools/assets/vendor.py` e rode `fetch`, `manifest` e `check` como acima. Confira no
+`LICENSE` do pacote e na linha de copyright da fonte que nenhum nome reservado foi
+declarado. O hash no nome do arquivo muda sozinho, o que invalida o cache dos
+navegadores. Trocar de família: os nomes lógicos (`sans-*`, `serif-*`, `mono-*`) em
+`src/osa/panel/assets.py` não mudam; mudam a tabela de arquivos, os pins e as regras
+`@font-face` de `styles.py`.
+
+Atualizar um pacote (precisa de Node/npm e rede): troque a versão e o hash de
+integridade (`npm view <pacote>@<versão> dist.integrity`) em
+`tools/assets/vendor.py`, depois:
+
+```sh
+uv run python tools/assets/vendor.py fetch      # baixa, confere o hash e copia só o que se usa
+uv run python tools/assets/vendor.py manifest   # recalcula os sha256
+uv run python tools/assets/vendor.py check      # confere manifesto x arquivos x versões fixadas
+uv run pytest -q
+```
+
+Depois de editar uma animação em `tools/lottie/generate.py`, rode o gerador e o
+passo `manifest`.

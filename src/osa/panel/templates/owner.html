@@ -1,15 +1,16 @@
 {% extends "base.html" %}
-{% from "_ui.html" import badge, toggle, empty, help_block with context %}
+{% from "_ui.html" import badge, toggle, empty, help_block, field with context %}
 {% set section = "owners" %}
 {% block title %}{{ owner.nome_fantasia }}{% endblock %}
 {% block content %}
-<a class="back" href="/owners">&larr; Donos</a>
+<a class="back" href="/owners">{{ icon("arrow-left") }}Donos</a>
 <header class="page-head">
-  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>{{ owner.nome_fantasia }}</h1></div>
+  <p class="eyebrow">Dono</p>
+  <h1>{{ owner.nome_fantasia }}</h1>
   <div class="status">Situação: {{ badge(owner.ativo) }}
-    {% if bootstrapped %}{{ toggle("/owners/%d/ativo" % owner.id, owner.ativo) }}{% endif %}</div>
+    {% if bootstrapped %}{{ toggle("/owners/%d/ativo" % owner.id, owner.ativo, owner.nome_fantasia) }}{% endif %}</div>
 </header>
-{% call help_block("donos") %}Aqui você corrige os dados do dono e cuida dos nomes alternativos (na tela, “alias”). O botão Salvar guarda os dados e recria, como nomes alternativos, o nome fantasia e a razão social. Cada nome alternativo é adicionado ou removido na hora, sem precisar de Salvar. Remover apaga de verdade, mas você pode adicionar o nome de novo.{% endcall %}
+{% call help_block("donos") %}Aqui você corrige os dados do dono e cuida dos nomes alternativos (na tela, “alias”). O botão Salvar guarda os dados e recria, como nomes alternativos, o nome fantasia e a razão social. Cada nome alternativo é adicionado na hora e removido depois de uma confirmação, sem precisar de Salvar.{% endcall %}
 <div class="split">
 {% if bootstrapped %}
 <form class="card" method="post" action="/owners/{{ owner.id }}">
@@ -17,13 +18,12 @@
   <fieldset>
     <legend>Dados</legend>
     <div class="form-grid">
-      <label>Nome fantasia <input type="text" name="nome_fantasia" value="{{ owner.nome_fantasia }}" required></label>
-      <label>Razão social <input type="text" name="razao_social" value="{{ owner.razao_social or '' }}"></label>
-      <label>CNPJ <input type="text" name="cnpj" value="{{ owner.cnpj or '' }}"></label>
-      <label>Pasta <input type="text" name="pasta" value="{{ owner.pasta }}" required></label>
-      <p class="help wide">Mudar a pasta não renomeia pastas que já existem no servidor.</p>
+      {{ field("dono-nome", "nome_fantasia", "Nome fantasia", owner.nome_fantasia, hint="obrigatório", required=true) }}
+      {{ field("dono-razao", "razao_social", "Razão social", owner.razao_social, hint="opcional") }}
+      {{ field("dono-cnpj", "cnpj", "CNPJ", owner.cnpj, hint="opcional, com ou sem máscara", inputmode="numeric", pattern="[0-9A-Za-z.\\/\\- ]*", title="Números, com ou sem pontos, barra e traço") }}
+      {{ field("dono-pasta", "pasta", "Pasta", owner.pasta, hint="obrigatório", help="Mudar a pasta não renomeia pastas que já existem no servidor.", required=true) }}
     </div>
-    <div class="form-actions"><button type="submit" class="btn btn-primary">Salvar</button></div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon("floppy-disk") }}Salvar</button></div>
   </fieldset>
 </form>
 {% endif %}
@@ -37,20 +37,20 @@
       {% if bootstrapped %}
       <form class="inline" method="post" action="/owners/{{ owner.id }}/aliases/{{ alias.id }}/remover">
         {% include "_csrf.html" %}
-        <button type="submit" class="btn btn-sm btn-danger">Remover</button>
+        <button type="submit" class="btn btn-sm btn-quiet" aria-label="Remover o alias {{ alias.alias }}">{{ icon("trash") }}Remover</button>
       </form>
       {% endif %}
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  {{ empty("Nenhum alias.", "", compact=true) }}
+  {{ empty("Nenhum alias.", "O nome fantasia e a razão social voltam como aliases ao salvar os dados." if bootstrapped else "", compact=true) }}
   {% endif %}
   {% if bootstrapped %}
-  <form class="inline-form" method="post" action="/owners/{{ owner.id }}/aliases">
+  <form class="inline-form divided" method="post" action="/owners/{{ owner.id }}/aliases">
     {% include "_csrf.html" %}
-    <label>Novo alias <input type="text" name="alias" required></label>
-    <button type="submit" class="btn btn-primary">Adicionar alias</button>
+    {{ field("novo-alias", "alias", "Novo alias", hint="outro nome do dono", required=true) }}
+    <button type="submit" class="btn btn-primary">{{ icon("plus") }}Adicionar alias</button>
   </form>
   {% endif %}
 </section>

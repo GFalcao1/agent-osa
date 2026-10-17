@@ -162,7 +162,9 @@ def test_every_page_links_to_the_manual_and_has_a_help_block(web: Web, with_admi
         page = web.get(path)
 
         nav = re.search(r'<nav class="nav".*?</nav>', page, re.S)
-        assert nav and re.search(r'<a href="/manual"[^>]*><svg', nav.group(0)), path
+        assert nav and re.search(
+            r'<a href="/manual"[^>]*><span class="nav-ico"><svg', nav.group(0)
+        ), path
 
         block = _help_block(page)
         assert "Como usar esta página" in block, path
@@ -233,7 +235,11 @@ def test_no_page_gets_an_inline_script_style_or_handler_from_the_help_blocks(web
     for path in [*_all_paths(web), "/manual"]:
         page = web.get(path)
 
-        assert re.findall(r"<script\b[^>]*>", page) == ['<script src="/theme.js">'], path
+        assert re.findall(r"<script\b[^>]*>", page) == [
+            '<script src="/theme.js">',
+            '<script src="/assets/lottie.min.js" defer>',
+            '<script src="/motion.js" defer>',
+        ], path
         assert "<style" not in page and " style=" not in page, path
         assert not re.search(r"\son\w+\s*=", page), path
 
@@ -382,7 +388,7 @@ def test_every_owner_refusal_and_notice_is_explained(web: Web) -> None:
     web.post(f"/owners/{owner_id}/aliases", status=303, alias="Beta Extra")
     with web.db() as session:
         extra = session.scalar(text("select id from owner_aliases where alias = 'beta extra'"))
-    web.post(f"/owners/{owner_id}/aliases/{extra}/remover", status=303)
+    web.post(f"/owners/{owner_id}/aliases/{extra}/remover", status=303, confirmar="1")
     refused(web, f"/owners/{owner_id}/aliases/{extra}/remover", "alias não encontrado")  # 2nd click
     web.post(f"/owners/{owner_id}", status=303, nome_fantasia="Beta Servicos", pasta="Beta Novo")
     notice = html.unescape(web.get(f"/owners/{owner_id}?aviso=pastas"))
@@ -399,7 +405,7 @@ def test_every_user_refusal_is_explained(web: Web) -> None:
         active = session.scalar(text("select id from departments where nome = 'Fiscal'"))
         old = session.scalar(text("select id from departments where nome = 'Antigo'"))
         admin = session.scalar(text("select id from users where papel = 'admin'"))
-    web.post(f"/departments/{old}/ativo", status=303, ativo="0")
+    web.post(f"/departments/{old}/ativo", status=303, ativo="0", confirmar="1")
     web.post(
         "/users", status=303, telegram_id="2002", nome="Maria Ficticia", papel="operator",
         departamento_id=str(active),
@@ -415,7 +421,11 @@ def test_every_user_refusal_is_explained(web: Web) -> None:
         form.update(changes)
         refused(web, "/users", message, status, **form)
 
-    create("telegram_id deve ser um número inteiro", telegram_id="abc")
+    create(
+        "Telegram ID deve ser só números. Não é o telefone nem o @nome: peça o número à "
+        "própria pessoa.",
+        telegram_id="abc",
+    )
     create("telegram_id deve ser um inteiro positivo", telegram_id="0")
     create("telegram_id já cadastrado", telegram_id="2002")
     create("nome é obrigatório", nome=" ")
@@ -426,6 +436,7 @@ def test_every_user_refusal_is_explained(web: Web) -> None:
     assert "departamento deve ser um número inteiro" in _quoted()
     refused(
         web, f"/users/{admin}/ativo", "não é possível desativar o último administrador ativo",
+        confirmar="1",
         ativo="0",
     )  # fmt: skip
 
@@ -492,7 +503,9 @@ def _controls(page: str) -> str:
     """Texts of buttons, labels and legends in <main>, without the help block."""
     main = page.split("<main", 1)[1]
     main = re.sub(r'<details class="help-block">.*?</details>', " ", main, flags=re.S)
-    texts = (re.sub(r"<[^>]+>|\s+", " ", body) for _, body in _CONTROL.findall(main))
+    texts = [re.sub(r"<[^>]+>|\s+", " ", body) for _, body in _CONTROL.findall(main)]
+    # Icon-only buttons (the row arrows) are named by aria-label instead of by their text.
+    texts += re.findall(r'<button\b[^>]*\baria-label="([^"]+)"', main)
     return html.unescape(" | ".join(texts))
 
 
@@ -504,7 +517,7 @@ def test_labels_quoted_by_the_manual_are_rendered_on_their_pages(web: Web, tmp_p
     web.post("/departments", status=303, nome="Pessoal")
     with web.db() as session:
         pessoal = session.scalar(text("select id from departments where nome = 'Pessoal'"))
-    web.post(f"/departments/{pessoal}/ativo", status=303, ativo="0")  # shows "Ativar"
+    web.post(f"/departments/{pessoal}/ativo", status=303, ativo="0", confirmar="1")  # "Ativar"
     web.post("/owners", status=303, nome_fantasia="Alfa Ficticia", aliases="Alfa Extra")
     with web.db() as session:
         owner = session.scalar(text("select id from owners where nome_fantasia = 'Alfa Ficticia'"))

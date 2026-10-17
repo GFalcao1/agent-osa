@@ -19,6 +19,8 @@ def show_manual(request: Request) -> Response:
         "bootstrapped": True,
         "error": None,
         "notice": None,
+        "success": None,
+        "confirm": None,
         "chapters": manual.CHAPTERS,
         "problems": manual.PROBLEMS,
     }

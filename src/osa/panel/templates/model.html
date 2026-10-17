@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% from "_ui.html" import help_block with context %}
+{% from "_ui.html" import help_block, field with context %}
 {% set section = "model" %}
 {% block title %}Modelo{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div class="title-row"><span class="ornament" aria-hidden="true"></span><h1>Modelo e provedor externo</h1></div>
-  <p class="lead">A chave nunca é digitada, gravada nem exibida aqui: ela só existe no ambiente
-    do processo. Sem chave, o provedor externo não pode ser ligado.</p>
+  <p class="eyebrow">Passo 5 de 5</p>
+  <h1>Modelo e provedor externo</h1>
+  <p class="lead">A chave nunca é digitada, gravada nem exibida aqui: ela só existe no ambiente do processo. Sem chave, o provedor externo não pode ser ligado.</p>
 </header>
 {% call help_block("modelo") %}Aqui você vê e ajusta o modelo de inteligência artificial que o agente usa. Normalmente ele já vem preenchido, então mude só com orientação. O provedor externo vem desligado e só liga se o responsável técnico tiver instalado a chave. Você nunca digita a chave aqui.{% endcall %}
 <div class="split split-rev">
@@ -22,12 +22,12 @@
   <fieldset>
     <legend>Modelo</legend>
     <div class="form-grid">
-      <label>Nome do modelo <input type="text" name="nome" value="{{ model.nome }}" required></label>
-      <label>Digest (opcional) <input type="text" name="digest" value="{{ model.digest or '' }}"></label>
-      <label class="check wide"><input type="checkbox" name="provedor_externo_ativo" {{ "checked" if model.provedor_externo_ativo }}>
-        Ligar provedor externo (só para o envelope de consulta)</label>
+      {{ field("modelo-nome", "nome", "Nome do modelo", model.nome, hint="sem espaços", required=true) }}
+      {{ field("modelo-digest", "digest", "Digest", model.digest, hint="opcional") }}
+      <div class="field wide"><label class="check"><input type="checkbox" name="provedor_externo_ativo" aria-describedby="modelo-externo-help" {{ "checked" if model.provedor_externo_ativo }}> Ligar provedor externo</label>
+        <p class="help" id="modelo-externo-help">Só para o envelope de consulta. Documentos nunca são enviados.</p></div>
     </div>
-    <div class="form-actions"><button type="submit" class="btn btn-primary">Salvar</button></div>
+    <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon("floppy-disk") }}Salvar</button></div>
   </fieldset>
 </form>
 {% endif %}
