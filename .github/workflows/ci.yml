@@ -144,7 +144,8 @@ jobs:
         run: uv run pytest -q --junitxml="$RUNNER_TEMP/portable.xml"
       - name: Assert tests actually ran
         # pytest exits 5 on an empty collection, but be explicit: zero tests is a
-        # failure, and the Node-backed theme tests must have run, not skipped.
+        # failure, and the Node-backed theme tests and the OCR tests (RapidOCR, models
+        # shipped in the wheel: no system package, no download) must have run, not skipped.
         run: |
           set -euo pipefail
           uv run python -I - "$RUNNER_TEMP/portable.xml" <<'PY'
@@ -156,11 +157,17 @@ jobs:
           skipped = [c for c in cases if c.find("skipped") is not None]
           theme = [c for c in cases if "theme_script" in (c.get("name") or "")]
           theme_skipped = [c for c in theme if c.find("skipped") is not None]
-          print(f"testcases={len(cases)} skipped={len(skipped)} theme={len(theme)}")
+          ocr = [c for c in cases if "ocr" in (c.get("name") or "")]
+          ocr_skipped = [c for c in ocr if c.find("skipped") is not None]
+          print(
+              f"testcases={len(cases)} skipped={len(skipped)} theme={len(theme)} ocr={len(ocr)}"
+          )
           if not cases:
               sys.exit("no tests were collected")
           if not theme or theme_skipped:
               sys.exit("the Node-backed theme tests did not run (is Node.js on PATH?)")
+          if not ocr or ocr_skipped:
+              sys.exit("the OCR tests did not run or were skipped")
           PY
 
   tests-integration:

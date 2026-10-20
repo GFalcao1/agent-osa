@@ -10,13 +10,21 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.13,<2",
+  "defusedxml>=0.7,<1",
   "fastapi>=0.115,<1",
   "jinja2>=3.1,<4",
+  "onnxruntime>=1.31,<2",
+  "openpyxl>=3.1,<4",
+  "pi-heif>=1.4,<2",
+  "pillow>=12,<14",
   "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.7,<3",
+  "pypdfium2>=5.14,<6",
+  "python-docx>=1.2,<2",
   "python-dotenv>=1.0,<2",
   "python-multipart>=0.0.9,<1",
   "pyyaml>=6,<7",
+  "rapidocr>=3.10,<4",
   "sqlalchemy>=2.0,<2.2",
   "structlog>=25.1,<27",
   "typer>=0.15,<1",
@@ -30,8 +38,12 @@ osa = "osa.cli:main"
 dev = [
   "httpx>=0.27,<1",
   "mypy>=1.14,<2",
+  # The pillow-heif wheels bundle a GPLv2 encoder: dev only, to write the HEIC fixture.
+  "pillow-heif>=1.8,<2",
   "pytest>=8.3,<9",
+  "reportlab>=4.2,<6",
   "ruff>=0.9,<1",
+  "types-openpyxl>=3.1,<4",
   "types-pyyaml>=6,<7",
 ]
 
@@ -55,6 +67,10 @@ select = ["E", "F", "I", "UP"]
 python_version = "3.12"
 strict = true
 files = ["src/osa"]
+
+[[tool.mypy.overrides]]
+module = ["pypdfium2.*", "pi_heif.*", "pillow_heif.*", "rapidocr.*", "onnxruntime.*", "defusedxml.*"]
+ignore_missing_imports = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/osa"]
