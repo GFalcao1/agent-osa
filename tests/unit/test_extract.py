@@ -503,6 +503,53 @@ def test_image_ocr_returns_the_fixture_words(
     assert_nota_text(content.text, fixture_maker)
 
 
+LINUX_RASTER = Path(__file__).resolve().parents[1] / "fixtures" / "ocr" / "nota_raster_linux.png"
+
+
+def test_long_line_misread_as_upside_down_is_still_read(fixture_maker: ModuleType) -> None:
+    # The nota fixture as pypdfium2 rasterizes it on Linux (CI, ubuntu-24.04): the angle
+    # classifier calls the long "Descrição" line upside down (0.94 > cls_thresh 0.9).
+    content = extract(LINUX_RASTER)
+
+    assert_nota_text(content.text, fixture_maker)
+    assert (
+        "Descrição: manutenção preventiva de equipamentos e contratação de consultoria"
+        in content.text
+    )
+
+
+def test_upside_down_scan_is_still_read(tmp_path: Path, docs: dict[str, Path]) -> None:
+    upside_down = tmp_path / "invertida.png"
+    with Image.open(docs["imagem.png"]) as image:
+        image.rotate(180).save(upside_down)
+
+    content = extract(upside_down)
+
+    assert "NOTA FISCAL" in content.text
+    assert "Prestador" in content.text
+
+
+def test_recognizer_arbitrates_the_angle_classifier() -> None:
+    from osa.extract.ocr import choose_orientation
+
+    originals = ["linha-a", "linha-b", "linha-c"]
+    rotated = ["a-rodada", "b-rodada", "linha-c"]
+    scores = {"linha-a": 0.99, "a-rodada": 0.40, "linha-b": 0.30, "b-rodada": 0.95}
+    calls: list[list[str]] = []
+
+    def recognize(images: list[str]) -> list[float]:
+        calls.append(images)
+        return [scores[image] for image in images]
+
+    kept = choose_orientation(originals, rotated, [0, 1], recognize)
+
+    # a: the classifier was wrong (upright reads better); b: it was right; c: not flagged.
+    assert kept == ["linha-a", "b-rodada", "linha-c"]
+    assert calls == [["linha-a", "linha-b", "a-rodada", "b-rodada"]]
+    assert choose_orientation(originals, rotated, [], recognize) == rotated
+    assert len(calls) == 1  # nothing flagged, no extra recognition
+
+
 def test_image_without_text_yields_an_image_and_empty_text(docs: dict[str, Path]) -> None:
     content = extract(docs["gradiente.png"])
 

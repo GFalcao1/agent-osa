@@ -7,6 +7,7 @@ Choice and measurements: docs/adr/0010-pdf-e-ocr-locais.md.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from osa.domain.errors import ExtractionFailed
@@ -33,13 +34,62 @@ def engine_params(max_side: int) -> dict[str, Any]:
     }
 
 
+def choose_orientation[T](
+    originals: Sequence[T],
+    rotated: Sequence[T],
+    flagged: Sequence[int],
+    recognize: Callable[[list[T]], Sequence[float]],
+) -> list[T]:
+    """Keep, for each line the angle classifier turned 180 degrees, the better-read side.
+
+    The classifier sees a line squeezed to 48 x 192 pixels; on a long line (about 30:1)
+    it can call an upright line upside down with a score above its threshold (measured:
+    0.94 on the Linux raster of the nota fixture). The recognizer reads both sides of
+    the flagged lines in one batch and its score decides.
+    """
+    kept = list(rotated)
+    if not flagged:
+        return kept
+    batch = [originals[i] for i in flagged] + [rotated[i] for i in flagged]
+    scores = list(recognize(batch))
+    for n, index in enumerate(flagged):
+        if scores[n] >= scores[n + len(flagged)]:
+            kept[index] = originals[index]
+    return kept
+
+
+def _engine_class() -> Any:
+    from rapidocr import RapidOCR
+    from rapidocr.ch_ppocr_rec.typings import TextRecInput
+
+    class ArbitratedRapidOCR(RapidOCR):
+        """RapidOCR whose 180-degree turns are confirmed by the recognizer."""
+
+        def cls_and_rotate(self, img: list[Any]) -> tuple[list[Any], Any]:
+            rotated, cls_res = super().cls_and_rotate(img)
+            threshold = self.cfg.Cls.cls_thresh
+            flagged = [
+                i
+                for i, (label, score) in enumerate(cls_res.cls_res or [])
+                if "180" in label and score > threshold
+            ]
+
+            def recognize(images: list[Any]) -> Sequence[float]:
+                rec_model: Any = self._load_rec_model  # untyped library method
+                return list(rec_model()(TextRecInput(img=images)).scores)
+
+            kept = choose_orientation(img, rotated, flagged, recognize)
+            cls_res.img_list = kept
+            return kept, cls_res
+
+    return ArbitratedRapidOCR
+
+
 def _get_engine(max_side: int) -> Any:
     engine = _engines.get(max_side)
     if engine is None:
         try:
-            from rapidocr import RapidOCR
-
-            engine = RapidOCR(params=engine_params(max_side))
+            engine = _engine_class()(params=engine_params(max_side))
         except MemoryError:
             raise
         except Exception as exc:
