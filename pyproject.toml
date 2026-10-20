@@ -37,7 +37,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -m 'not integration'"
+addopts = "-ra -m 'not integration and not native'"
 markers = [
   "integration: requires a disposable PostgreSQL configured by OSA_TEST_DATABASE_URL; run with -m integration",
   "native: requires the target filesystem profile and is not part of the portable suite",

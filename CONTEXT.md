@@ -80,18 +80,26 @@ Código determinístico que confere evidência de dono, template e raiz, e execu
 _Evitar_: executor, agente
 
 **Arquivamento**:
-Rename de um arquivo para a pasta de destino dentro da mesma raiz, com sufixo em colisão e sem sobrescrita.
+Rename de um arquivo para a pasta de destino dentro da mesma raiz, com sufixo em colisão e sem sobrescrita. Sem rename exclusivo comprovado no volume, ou com nome que não cabe no share, é recusado sem efeito e o caso vai para revisão.
 _Evitar_: mover, organizar, upload
 
 **Arquivamento automático**:
 Arquivamento sem humano, permitido só com evidência de dono e envelope sem reserva.
 
+**Quarentena**:
+Pasta `.osa-quarentena` dentro de cada raiz onde o upload é gravado, com nome exclusivo, até o arquivamento. Fica no mesmo volume da árvore, então arquivar é rename. Criada pela aplicação na primeira gravação de upload, só com efeitos de filesystem ligados; nunca é destino de arquivamento nem entra no scan. O arquivo de pasta monitorada não passa por ela.
+_Evitar_: inbox, área temporária, pasta de entrada
+
 **Revisão**:
 Caso que o correio não arquivou sozinho, entregue ao revisor com botões para decidir dono, departamento ou deixar na origem.
 _Evitar_: aprovação, plano
 
+**Simulado**:
+Resultado previsto de um efeito de filesystem que não aconteceu porque os efeitos estão desligados (`simulated=True`). Calculado com o estado observado no momento; não promete ser igual ao da execução real.
+_Evitar_: dry-run, teste
+
 **Desfazer**:
-Rename inverso de um arquivamento registrado, dentro da mesma raiz, nunca apagando.
+Rename inverso de um arquivamento registrado, dentro da mesma raiz, conferido pelo hash gravado na operação, nunca apagando.
 
 ### Pessoas
 
@@ -148,7 +156,7 @@ Nomes em inglês, colunas em português.
 | Raiz | `roots` |
 | Pasta monitorada | `watched_folders` |
 | Índice | `documents` |
-| Arquivamento (operações, para desfazer) | `archive_operations` |
+| Arquivamento (operações: raiz, caminhos relativos e hash, para desfazer) | `archive_operations` |
 | Revisão | `review_cases` |
 | Auditoria | `audit_events` |
 | Configuração do modelo (linha única) | `installation_settings` |
