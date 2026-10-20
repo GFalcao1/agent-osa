@@ -75,28 +75,38 @@ SOFTWARE.
 
 ## IBM Plex Sans
 
-- Pacote: `@fontsource-variable/ibm-plex-sans` versão **5.3.0**
-  (fonte versão 3.201)
+- Pacote: `@ibm/plex-sans` versão **1.1.0** (pacote oficial da IBM no registro npm;
+  fonte versão 3.005)
 - Projeto original: https://github.com/IBM/plex
 - Integridade (registro npm):
-  `sha512-agG8tXFEo0hD9+J7npa4vbbWult52eMLVaQ6WQRlhs/iCAojrMAoejru85W9HTVXHfyUj96KM7gp/KGAS87XaQ==`
-- Uso: texto, controles e interface do painel. Dois arquivos WOFF2 variáveis (eixo de peso
-  100 a 700; o painel usa 400, 500 e 600), `ibm-plex-sans-latin-wght-normal.woff2` e
-  `ibm-plex-sans-latin-ext-wght-normal.woff2`. O arquivo de caracteres latinos
-  estendidos só é baixado quando uma página usa um caractere dessa faixa. Em `src/osa/panel/static/fonts/`.
-- Modificação: nenhuma. Os arquivos são copiados byte a byte do pacote, sem recorte,
-  conversão ou renomeação feitos aqui (o `unicode-range` e os apelidos de família
-  "Plex Sans Web" e "Plex Sans Fallback" ficam só no CSS do painel). A cópia do texto da licença
-  que acompanha as fontes está em `src/osa/panel/static/fonts/OFL-ibm-plex-sans.txt`.
-- Reserved Font Name: nem o cabeçalho da licença abaixo nem a linha de copyright
-  gravada nas próprias fontes reservam algum nome.
+  `sha512-WPgvO6Yfj2w5YbhyAr1tv95RUz4LRJlqN+CmYvBglabXteufP1D1E9BABMde+ZIKdRbFJDoKF5eQzfhpnbgZcQ==`
+- Uso: texto, controles e interface do painel. Seis arquivos WOFF2 estáticos, um por
+  peso usado (400, 500 e 600; a IBM não publica versão variável para a web) e por recorte:
+  `ibm-plex-sans-{400,500,600}-latin1.woff2` (de `fonts/split/woff2/IBMPlexSans-{Regular,
+  Medium,SemiBold}-Latin1.woff2`) e `ibm-plex-sans-{400,500,600}-latin2.woff2` (idem,
+  `-Latin2`). Os arquivos `latin2` (latino estendido) só são baixados quando uma página usa
+  um caractere dessa faixa. Em `src/osa/panel/static/fonts/`.
+- Licença: SIL Open Font License 1.1, no `LICENSE.txt` do pacote (reproduzido abaixo; o
+  mesmo texto do projeto original). Linha de copyright gravada nas fontes:
+  `Copyright 2018 IBM Corp. All rights reserved.`. A cópia que acompanha as fontes está em
+  `src/osa/panel/static/fonts/OFL-ibm-plex-sans.txt` (o `LICENSE.txt` do pacote, byte a byte).
+- Modificação: nenhuma; arquivos produzidos e publicados pelo detentor do copyright. São
+  os arquivos web que a própria IBM gera e publica no pacote (já em WOFF2 e recortados
+  por ela em faixas de caracteres), copiados byte a byte; só o nome do arquivo local é
+  outro. Não são "Modified Versions" de terceiros, por isso as tabelas `name` internas
+  dizem "IBM Plex Sans", como a IBM as gravou.
+- Reserved Font Name: a licença declara Reserved Font Name "Plex"
+  (`Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"`). A restrição vale para
+  versões modificadas, que aqui não há. Mesmo assim o CSS do painel declara e pede só os
+  apelidos neutros "Panel Sans" e "Panel Sans Fallback", que não colidem com uma fonte
+  instalada na máquina.
 
 ```text
-Copyright 2019 IBM Corp. All rights reserved. IBMPlexSans-Italic[wdth,wght].ttf: Copyright 2019 IBM Corp. All rights reserved.
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
-This license is copied below, and is also available with a FAQ at:
-http://scripts.sil.org/OFL
+
+This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
 
 
 -----------------------------------------------------------
@@ -112,7 +122,7 @@ with others.
 
 The OFL allows the licensed fonts to be used, studied, modified and
 redistributed freely as long as they are not sold by themselves. The
-fonts, including any derivative works, can be bundled, embedded,
+fonts, including any derivative works, can be bundled, embedded, 
 redistributed and/or sold with any software provided that any reserved
 names are not used by derivative works. The fonts and derivatives,
 however, cannot be released under any other type of license. The
@@ -189,28 +199,36 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ## IBM Plex Serif
 
-- Pacote: `@fontsource/ibm-plex-serif` versão **5.3.0**
-  (fonte versão 2.6)
+- Pacote: `@ibm/plex-serif` versão **2.0.0** (pacote oficial da IBM no registro npm;
+  fonte versão 3.006)
 - Projeto original: https://github.com/IBM/plex
 - Integridade (registro npm):
-  `sha512-zwPfHB7EJbS5B8qnitPigJYzNdnt6PUeaoOA1gAAt//1pjpTVZN5sOU14NIAZ+C1xypL6GWsUG2VMYJW9bhJqQ==`
+  `sha512-xVu9JsC18tBoQF2M6fofpsWrHj5a94saxlOZbYmXoC0E3UfjgS1JlibgrnaUJjnkLlEyCpMgI2PdhkDxijw0gA==`
 - Uso: títulos de página, títulos de cartão e números da página inicial (peso 600).
-  Dois arquivos WOFF2, `ibm-plex-serif-latin-600-normal.woff2` e
-  `ibm-plex-serif-latin-ext-600-normal.woff2` (este só quando a página usa a faixa
-  latina estendida). Em `src/osa/panel/static/fonts/`.
-- Modificação: nenhuma. Os arquivos são copiados byte a byte do pacote, sem recorte,
-  conversão ou renomeação feitos aqui (o `unicode-range` e os apelidos de família
-  "Plex Serif Web" e "Plex Serif Fallback" ficam só no CSS do painel). A cópia do texto da licença
-  que acompanha as fontes está em `src/osa/panel/static/fonts/OFL-ibm-plex-serif.txt`.
-- Reserved Font Name: nem o cabeçalho da licença abaixo nem a linha de copyright
-  gravada nas próprias fontes reservam algum nome.
+  Dois arquivos WOFF2, `ibm-plex-serif-600-latin1.woff2` e `ibm-plex-serif-600-latin2.woff2`
+  (de `fonts/split/woff2/IBMPlexSerif-SemiBold-Latin1.woff2` e `-Latin2.woff2`; o segundo só
+  quando a página usa a faixa latina estendida). Em `src/osa/panel/static/fonts/`.
+- Licença: SIL Open Font License 1.1, no `LICENSE.txt` do pacote (reproduzido abaixo; o
+  mesmo texto do projeto original). Linha de copyright gravada nas fontes:
+  `Copyright 2020 IBM Corp. All rights reserved.`. A cópia que acompanha as fontes está em
+  `src/osa/panel/static/fonts/OFL-ibm-plex-serif.txt` (o `LICENSE.txt` do pacote, byte a byte).
+- Modificação: nenhuma; arquivos produzidos e publicados pelo detentor do copyright. São
+  os arquivos web que a própria IBM gera e publica no pacote (já em WOFF2 e recortados
+  por ela em faixas de caracteres), copiados byte a byte; só o nome do arquivo local é
+  outro. Não são "Modified Versions" de terceiros, por isso as tabelas `name` internas
+  dizem "IBM Plex Serif", como a IBM as gravou.
+- Reserved Font Name: a licença declara Reserved Font Name "Plex"
+  (`Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"`). A restrição vale para
+  versões modificadas, que aqui não há. Mesmo assim o CSS do painel declara e pede só os
+  apelidos neutros "Panel Serif" e "Panel Serif Fallback", que não colidem com uma fonte
+  instalada na máquina.
 
 ```text
-Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-ThinItalic.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-ExtraLight.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-ExtraLightItalic.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-Light.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-LightItalic.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-Regular.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-Italic.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-Medium.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-MediumItalic.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-SemiBold.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-SemiBoldItalic.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-Bold.ttf: Copyright 2020 IBM Corp. All rights reserved. IBMPlexSerif-BoldItalic.ttf: Copyright 2020 IBM Corp. All rights reserved.
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
-This license is copied below, and is also available with a FAQ at:
-http://scripts.sil.org/OFL
+
+This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
 
 
 -----------------------------------------------------------
@@ -226,7 +244,7 @@ with others.
 
 The OFL allows the licensed fonts to be used, studied, modified and
 redistributed freely as long as they are not sold by themselves. The
-fonts, including any derivative works, can be bundled, embedded,
+fonts, including any derivative works, can be bundled, embedded, 
 redistributed and/or sold with any software provided that any reserved
 names are not used by derivative works. The fonts and derivatives,
 however, cannot be released under any other type of license. The
@@ -303,26 +321,35 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ## IBM Plex Mono
 
-- Pacote: `@fontsource/ibm-plex-mono` versão **5.3.0**
-  (fonte versão 2.3)
+- Pacote: `@ibm/plex-mono` versão **2.5.0** (pacote oficial da IBM no registro npm;
+  fonte versão 2.005)
 - Projeto original: https://github.com/IBM/plex
 - Integridade (registro npm):
-  `sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==`
+  `sha512-STBJIPxPomOYPmBMO7z5TKPJUotAF9u3gAUumTqVgwgrAO+K4FRNh0MlhsoJjKhJKsMbBJR10/bk4inkj/wc1w==`
 - Uso: pastas, códigos e endereços exibidos em fonte monoespaçada. Um arquivo WOFF2,
-  `ibm-plex-mono-latin-400-normal.woff2` (peso 400). Em `src/osa/panel/static/fonts/`.
-- Modificação: nenhuma. Os arquivos são copiados byte a byte do pacote, sem recorte,
-  conversão ou renomeação feitos aqui (o `unicode-range` e os apelidos de família
-  "Plex Mono Web" e "Plex Mono Fallback" ficam só no CSS do painel). A cópia do texto da licença
-  que acompanha as fontes está em `src/osa/panel/static/fonts/OFL-ibm-plex-mono.txt`.
-- Reserved Font Name: nem o cabeçalho da licença abaixo nem a linha de copyright
-  gravada nas próprias fontes reservam algum nome.
+  `ibm-plex-mono-400-latin1.woff2` (peso 400, de
+  `fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2`). Em `src/osa/panel/static/fonts/`.
+- Licença: SIL Open Font License 1.1, no `LICENSE.txt` do pacote (reproduzido abaixo; o
+  mesmo texto do projeto original). Linha de copyright gravada nas fontes:
+  `Copyright 2017 IBM Corp. All rights reserved.`. A cópia que acompanha as fontes está em
+  `src/osa/panel/static/fonts/OFL-ibm-plex-mono.txt` (o `LICENSE.txt` do pacote, byte a byte).
+- Modificação: nenhuma; arquivos produzidos e publicados pelo detentor do copyright. São
+  os arquivos web que a própria IBM gera e publica no pacote (já em WOFF2 e recortados
+  por ela em faixas de caracteres), copiados byte a byte; só o nome do arquivo local é
+  outro. Não são "Modified Versions" de terceiros, por isso as tabelas `name` internas
+  dizem "IBM Plex Mono", como a IBM as gravou.
+- Reserved Font Name: a licença declara Reserved Font Name "Plex"
+  (`Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"`). A restrição vale para
+  versões modificadas, que aqui não há. Mesmo assim o CSS do painel declara e pede só os
+  apelidos neutros "Panel Mono" e "Panel Mono Fallback", que não colidem com uma fonte
+  instalada na máquina.
 
 ```text
-Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-ThinItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-ExtraLight.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-ExtraLightItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Light.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-LightItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Regular.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Italic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Medium.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-MediumItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-SemiBold.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-SemiBoldItalic.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-Bold.ttf: Copyright 2017 IBM Corp. All rights reserved. IBMPlexMono-BoldItalic.ttf: Copyright 2017 IBM Corp. All rights reserved.
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
-This license is copied below, and is also available with a FAQ at:
-http://scripts.sil.org/OFL
+
+This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
 
 
 -----------------------------------------------------------
@@ -338,7 +365,7 @@ with others.
 
 The OFL allows the licensed fonts to be used, studied, modified and
 redistributed freely as long as they are not sold by themselves. The
-fonts, including any derivative works, can be bundled, embedded,
+fonts, including any derivative works, can be bundled, embedded, 
 redistributed and/or sold with any software provided that any reserved
 names are not used by derivative works. The fonts and derivatives,
 however, cannot be released under any other type of license. The

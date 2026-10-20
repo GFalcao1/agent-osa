@@ -6,7 +6,9 @@ also refuse any ``http://``, ``https://`` or ``@import`` in this text). The type
 Plex Sans for text and controls, IBM Plex Serif for titles and counts, IBM Plex Mono for
 folders and codes; one switch, ``DISPLAY``, at the end) are self-hosted files under
 ``/fonts/`` (``osa.panel.assets``): with no ``font-src`` the CSP falls back to
-``default-src 'self'``, so the policy did not change.
+``default-src 'self'``, so the policy did not change. The files are IBM's own web builds,
+unchanged; the ``@font-face`` families here still use neutral aliases ("Panel Sans", "Panel
+Serif", "Panel Mono" and their "... Fallback" faces), so no local font can collide with them.
 Palette: white and pale-blue surfaces (a deep navy ink in the dark theme), blue as the
 primary color, red for destructive actions, errors and "inativo", and gold only as thin
 details (1px rules and gradient edges, the active-nav marker, the focus inner line, the inner
@@ -74,53 +76,56 @@ _DARK_TOKENS: Final = """\
   color-scheme: dark;
 """
 
-_LATIN: Final = """\
-U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
-    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"""
-_LATIN_EXT: Final = """\
-U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
-    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
-    U+2113, U+2C60-2C7F, U+A720-A7FF"""
+# Exactly the character ranges of IBM's own subsets ("Latin1" and "Latin2" in
+# ``fonts/split/woff2`` of the ``@ibm/plex-*`` packages; checked against each file's cmap). The
+# Latin2 file is only fetched when a page uses a character of its range.
+_LATIN1: Final = """\
+U+0020-007E, U+00A0-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2013-2014,
+    U+2018-201A, U+201C-201E, U+2020-2022, U+2026, U+2030, U+2039-203A, U+2044, U+20AC, U+2122,
+    U+2212, U+FB01-FB02"""
+_LATIN2: Final = """\
+U+0100-0101, U+0104-0130, U+0132-0151, U+0154-017F, U+018F, U+0192, U+01A0-01A1,
+    U+01AF-01B0, U+01FA-01FF, U+0218-021B, U+0237, U+0259, U+1E80-1E85, U+1E9E, U+20A1, U+20A4,
+    U+20A6, U+20A8-20AA, U+20AD-20AE, U+20B1-20B2, U+20B4-20B5, U+20B8-20BA, U+20BD, U+20BF"""
+_RANGES: Final = {"latin1": _LATIN1, "latin2": _LATIN2}
+
+
+def _face(family: str, weight: int, subset: str) -> str:
+    """One self-hosted face: one weight of one family, one IBM subset, by its hashed URL."""
+    key = f"{family.lower()}-{weight}-{subset}"
+    return (
+        "@font-face {\n"
+        f'  font-family: "Panel {family}"; font-style: normal; font-weight: {weight};\n'
+        f'  font-display: swap; src: url("{font_path(key)}") format("woff2");\n'
+        f"  unicode-range: {_RANGES[subset]};\n"
+        "}\n"
+    )
+
+
+# The sans ships three static weights (IBM publishes no variable web build); the serif 600 only,
+# the mono 400 only (Latin1 only: folders and codes).
+_WEB_FACES: Final = "".join(
+    [
+        *(_face("Sans", w, s) for w in (400, 500, 600) for s in ("latin1", "latin2")),
+        *(_face("Serif", 600, s) for s in ("latin1", "latin2")),
+        _face("Mono", 400, "latin1"),
+    ]
+)
 
 _FACES: Final = f"""\
 /* ---------- fonts: self-hosted, hashed file names, metric-compatible fallbacks ---------- */
+{_WEB_FACES}/* Same metrics as each web face (advance widths and hhea ascent/descent of the font
+   files against the local face; the sans from its 400 face), so the swap moves nothing. */
 @font-face {{
-  font-family: "Plex Sans Web"; font-style: normal; font-weight: 400 600;
-  font-display: swap; src: url("{font_path("sans-latin")}") format("woff2");
-  unicode-range: {_LATIN};
-}}
-@font-face {{
-  font-family: "Plex Sans Web"; font-style: normal; font-weight: 400 600;
-  font-display: swap; src: url("{font_path("sans-latin-ext")}") format("woff2");
-  unicode-range: {_LATIN_EXT};
-}}
-@font-face {{
-  font-family: "Plex Serif Web"; font-style: normal; font-weight: 600;
-  font-display: swap; src: url("{font_path("serif-latin")}") format("woff2");
-  unicode-range: {_LATIN};
-}}
-@font-face {{
-  font-family: "Plex Serif Web"; font-style: normal; font-weight: 600;
-  font-display: swap; src: url("{font_path("serif-latin-ext")}") format("woff2");
-  unicode-range: {_LATIN_EXT};
-}}
-@font-face {{
-  font-family: "Plex Mono Web"; font-style: normal; font-weight: 400;
-  font-display: swap; src: url("{font_path("mono-latin")}") format("woff2");
-  unicode-range: {_LATIN};
-}}
-/* Same metrics as each web face (computed from the font files against the local face), so the
-   swap does not move anything. */
-@font-face {{
-  font-family: "Plex Sans Fallback"; src: local("Arial"), local("Helvetica");
+  font-family: "Panel Sans Fallback"; src: local("Arial"), local("Helvetica");
   size-adjust: 101.1%; ascent-override: 101.4%; descent-override: 27.2%; line-gap-override: 0%;
 }}
 @font-face {{
-  font-family: "Plex Serif Fallback"; src: local("Georgia"), local("Times New Roman");
+  font-family: "Panel Serif Fallback"; src: local("Georgia"), local("Times New Roman");
   size-adjust: 109.4%; ascent-override: 93.7%; descent-override: 25.1%; line-gap-override: 0%;
 }}
 @font-face {{
-  font-family: "Plex Mono Fallback"; src: local("Courier New"), local("Courier");
+  font-family: "Panel Mono Fallback"; src: local("Courier New"), local("Courier");
   size-adjust: 100%; ascent-override: 102.5%; descent-override: 27.5%; line-gap-override: 0%;
 }}
 
@@ -169,16 +174,17 @@ _CSS: Final = """\
     0 40px 80px -36px rgba(31, 58, 147, 0.26);
   /* the fine gold edge: along the top of cards and banners, inside primary buttons */
   --gold-edge: linear-gradient(90deg, transparent, var(--gold), transparent);
-  --gold-ring: inset 0 0 0 1px rgba(214, 178, 94, 0.55);
+  --gold-ring: inset 0 0 0 1px color-mix(in srgb, var(--gold) 55%, transparent);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --fade: background-color 0.35s var(--ease), color 0.35s var(--ease),
     border-color 0.35s var(--ease);
 
-  /* typography: families (suffixed names never collide with a locally installed font) */
-  --font: "Plex Sans Web", "Plex Sans Fallback", "Segoe UI", Roboto, Helvetica, Arial,
+  /* typography: families. Neutral aliases (no upstream name, see ADR 0009) that never collide
+     with a locally installed font. */
+  --font: "Panel Sans", "Panel Sans Fallback", "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
-  --serif: "Plex Serif Web", "Plex Serif Fallback", Georgia, "Times New Roman", serif;
-  --mono: "Plex Mono Web", "Plex Mono Fallback", ui-monospace, Menlo, Consolas, monospace;
+  --serif: "Panel Serif", "Panel Serif Fallback", Georgia, "Times New Roman", serif;
+  --mono: "Panel Mono", "Panel Mono Fallback", ui-monospace, Menlo, Consolas, monospace;
   /* titles, counts and card titles: the one switch between the two type variants */
   --font-display: /*DISPLAY*/;
   /* scale (rem, base 16px) */
@@ -318,10 +324,6 @@ strong { font-weight: var(--w-semibold); }
 }
 .skip:focus { top: var(--sp-3); }
 .icon { width: 1.25rem; height: 1.25rem; flex: none; }
-.sr-only {
-  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
-}
 /* numbers that are compared down a column or read as identifiers keep a fixed width */
 td, .stat .value, .fact, input[type=text], textarea, .chapter-num, .steps > li::before,
 .toc-list a::before, code, .tree, .badge { font-variant-numeric: tabular-nums; }
@@ -335,7 +337,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px var(--blue-soft), 0 0 0 4px var(--focus);
 }
 .btn:focus-visible, button:focus-visible { outline-offset: 3px; }
-.btn-danger:focus-visible, .btn-confirm:focus-visible { outline-color: var(--red); }
+.btn-confirm:focus-visible { outline-color: var(--red); }
 
 /* ---------- shell: sidebar on wide screens, compact top bar below ---------- */
 .shell { display: block; }
@@ -606,9 +608,6 @@ button:active, .btn:active { transform: translateY(1px) scale(0.98); }
 .btn-primary:hover, .btn-save.is-dirty:hover { color: var(--on-accent);
   background: var(--blue-solid-hover); border-color: var(--blue-solid-hover);
   box-shadow: inset 0 0 0 1px var(--gold), 0 8px 18px -8px rgba(31, 58, 147, 0.7); }
-.btn-danger { color: var(--red); background: var(--surface); border-color: var(--red); }
-.btn-danger:hover { color: var(--on-accent); background: var(--red-solid);
-  border-color: var(--red-solid); }
 .btn-confirm { color: var(--on-accent); background: var(--red-solid);
   border-color: var(--red-solid); }
 .btn-confirm:hover { color: var(--on-accent); background: var(--red-solid);
@@ -943,7 +942,7 @@ a.card.manual-link:hover { border-color: var(--blue); }
   border-color: var(--blue-line); }
 .problem-tag-situacao { color: var(--muted); background: var(--surface-2);
   border-color: var(--hairline-strong); }
-.problem-tag, .subhead, .side-label, table.stack-md td[data-label]::before {
+.problem-tag, .side-label, table.stack-md td[data-label]::before {
   font-size: var(--text-xs); font-weight: var(--w-semibold); letter-spacing: var(--track-caps);
   text-transform: uppercase;
 }
@@ -969,7 +968,6 @@ a.card.manual-link:hover { border-color: var(--blue); }
 .lt-stroke path { stroke: currentColor; }
 .lt-fill path { fill: currentColor; }
 .lt-gold-fill path { fill: var(--gold); }
-.lt-gold-stroke path { stroke: var(--gold); }
 
 /* ---------- motion: short, once, never looping; all of it off under reduced motion ---------- */
 /* Damped-spring pop in four stops: rise with overshoot, dip, small rebound, settle. */
@@ -1245,7 +1243,7 @@ def build(display: str = DISPLAY) -> str:
 def preload_fonts(display: str = DISPLAY) -> tuple[str, ...]:
     """Fonts every page needs at once (``<link rel="preload">``): the text face, plus the serif
     when it sets the titles."""
-    return ("sans-latin", "serif-latin") if display == "serif" else ("sans-latin",)
+    return ("sans-400-latin1", "serif-600-latin1") if display == "serif" else ("sans-400-latin1",)
 
 
 CSS: Final = build()

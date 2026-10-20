@@ -405,9 +405,13 @@ def update_user(
     return user
 
 
-def set_user_active(session: Session, user_id: int, ativo: bool, *, actor: str) -> User:
-    user = _fetch(session, User, user_id, "usuário")
-    if not ativo and user.ativo and user.papel == Role.ADMIN.value:
+def ensure_can_deactivate_user(session: Session, user: User) -> None:
+    """Refuse to deactivate the last active administrator; writes nothing either way.
+
+    ``set_user_active`` runs it, and the panel runs it before asking for a confirmation, so it
+    never asks a question whose answer would always be refused.
+    """
+    if user.ativo and user.papel == Role.ADMIN.value:
         others = session.scalar(
             select(func.count())
             .select_from(User)
@@ -415,6 +419,12 @@ def set_user_active(session: Session, user_id: int, ativo: bool, *, actor: str) 
         )
         if not others:
             raise Conflict("não é possível desativar o último administrador ativo")
+
+
+def set_user_active(session: Session, user_id: int, ativo: bool, *, actor: str) -> User:
+    user = _fetch(session, User, user_id, "usuário")
+    if not ativo:
+        ensure_can_deactivate_user(session, user)
     user.ativo = ativo
     session.flush()
     _audit(session, actor, f"user.{_active_verb(ativo)}", "user", user.id)
