@@ -27,8 +27,6 @@ from markupsafe import Markup
 
 from osa.panel.assets import STATIC_DIR, AssetIntegrityError
 
-WEIGHTS: Final = ("regular", "fill", "duotone")
-
 _NAME: Final = re.compile(
     r"^(?P<name>[a-z0-9]+(?:-[a-z0-9]+)*?)(?:-(?P<weight>fill|duotone))?\.svg$"
 )

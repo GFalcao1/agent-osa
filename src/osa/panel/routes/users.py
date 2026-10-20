@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from osa.admin import services
 from osa.db.models import Department, User
+from osa.domain.errors import Conflict
 from osa.panel.routes.common import (
     ACTOR,
     confirmation,
@@ -121,6 +122,12 @@ def toggle_user(
     session: Session = Depends(get_session),
 ) -> Response:
     user = session.get(User, user_id)
+    if user is not None and ativo != "1":
+        # Refused anyway (last active administrator): say so now, without asking first.
+        try:
+            services.ensure_can_deactivate_user(session, user)
+        except Conflict as error:
+            return _page(request, session, error=str(error), status=409)
     if user is not None and must_confirm(session, confirmar, destructive=ativo != "1"):
         return _page(
             request,

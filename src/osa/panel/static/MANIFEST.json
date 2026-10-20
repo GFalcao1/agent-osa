@@ -9,28 +9,28 @@
       "url": "https://github.com/phosphor-icons/core"
     },
     "plex-sans": {
-      "package": "@fontsource-variable/ibm-plex-sans",
-      "version": "5.3.0",
-      "integrity": "sha512-agG8tXFEo0hD9+J7npa4vbbWult52eMLVaQ6WQRlhs/iCAojrMAoejru85W9HTVXHfyUj96KM7gp/KGAS87XaQ==",
+      "package": "@ibm/plex-sans",
+      "version": "1.1.0",
+      "integrity": "sha512-WPgvO6Yfj2w5YbhyAr1tv95RUz4LRJlqN+CmYvBglabXteufP1D1E9BABMde+ZIKdRbFJDoKF5eQzfhpnbgZcQ==",
       "license": "OFL-1.1",
       "url": "https://github.com/IBM/plex",
-      "font_version": "3.201"
+      "font_version": "3.005"
     },
     "plex-serif": {
-      "package": "@fontsource/ibm-plex-serif",
-      "version": "5.3.0",
-      "integrity": "sha512-zwPfHB7EJbS5B8qnitPigJYzNdnt6PUeaoOA1gAAt//1pjpTVZN5sOU14NIAZ+C1xypL6GWsUG2VMYJW9bhJqQ==",
+      "package": "@ibm/plex-serif",
+      "version": "2.0.0",
+      "integrity": "sha512-xVu9JsC18tBoQF2M6fofpsWrHj5a94saxlOZbYmXoC0E3UfjgS1JlibgrnaUJjnkLlEyCpMgI2PdhkDxijw0gA==",
       "license": "OFL-1.1",
       "url": "https://github.com/IBM/plex",
-      "font_version": "2.6"
+      "font_version": "3.006"
     },
     "plex-mono": {
-      "package": "@fontsource/ibm-plex-mono",
-      "version": "5.3.0",
-      "integrity": "sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==",
+      "package": "@ibm/plex-mono",
+      "version": "2.5.0",
+      "integrity": "sha512-STBJIPxPomOYPmBMO7z5TKPJUotAF9u3gAUumTqVgwgrAO+K4FRNh0MlhsoJjKhJKsMbBJR10/bk4inkj/wc1w==",
       "license": "OFL-1.1",
       "url": "https://github.com/IBM/plex",
-      "font_version": "2.3"
+      "font_version": "2.005"
     },
     "lottie": {
       "package": "lottie-web",
@@ -47,35 +47,51 @@
       "origin": "own"
     },
     "fonts/OFL-ibm-plex-mono.txt": {
-      "sha256": "23b0a9d0c6d3f140a0b77e483c5cfa6bba574325ef5cb189ed9f2fec4884533f",
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
       "origin": "plex-mono-licence"
     },
     "fonts/OFL-ibm-plex-sans.txt": {
-      "sha256": "d0283623ef57e722fd0eb688a8041589670c608ab780cd3612d06ba6f153d3fd",
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
       "origin": "plex-sans-licence"
     },
     "fonts/OFL-ibm-plex-serif.txt": {
-      "sha256": "b9e9c867b084f43f2bf0284808dbf394b5a027200577c246f2ac4fe2711da416",
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
       "origin": "plex-serif-licence"
     },
-    "fonts/ibm-plex-mono-latin-400-normal.woff2": {
-      "sha256": "08949f728dc52d528e69b1667d15c89a5686a4ee9a296ff90983985f99c380f7",
+    "fonts/ibm-plex-mono-400-latin1.woff2": {
+      "sha256": "e8993d946649b9d01abb1ed06d574b19d8ea3e66b5c3948602db335c44c18e56",
       "origin": "plex-mono"
     },
-    "fonts/ibm-plex-sans-latin-ext-wght-normal.woff2": {
-      "sha256": "d160e20920ae4d6556518d352d3af27a74e9b0de3d8fe17b1c1044fc75aa2f81",
+    "fonts/ibm-plex-sans-400-latin1.woff2": {
+      "sha256": "b5ad7bd39f996144915f0ad9849a90183b27d8c28ad97ed98af5b1bebc51f6b1",
       "origin": "plex-sans"
     },
-    "fonts/ibm-plex-sans-latin-wght-normal.woff2": {
-      "sha256": "e2291e842cf5af167122a22881a740c7f2dda7716f1e8cd76680264f4a859470",
+    "fonts/ibm-plex-sans-400-latin2.woff2": {
+      "sha256": "fcfa82e0d46ed01a8df38610b451860ca7e7518770c52fdd2a1d136247c40f28",
       "origin": "plex-sans"
     },
-    "fonts/ibm-plex-serif-latin-600-normal.woff2": {
-      "sha256": "e279e4f8baa0d4634d98868092f2198ae0dcd9e142c935822c385b9843352a9b",
+    "fonts/ibm-plex-sans-500-latin1.woff2": {
+      "sha256": "b5610af04d0d4b5a14a621d96d974b993e945a065db1a8861918f69ef9321934",
+      "origin": "plex-sans"
+    },
+    "fonts/ibm-plex-sans-500-latin2.woff2": {
+      "sha256": "46fbe4f398e7ff3cc7773a1156b1efef0f81e4d034f682369c221de587f443ca",
+      "origin": "plex-sans"
+    },
+    "fonts/ibm-plex-sans-600-latin1.woff2": {
+      "sha256": "fff0ab3a88b0b4aa0b693e4f0201359a15183b08e3fa5696d1918d8f0ade8ad5",
+      "origin": "plex-sans"
+    },
+    "fonts/ibm-plex-sans-600-latin2.woff2": {
+      "sha256": "2bc85a8e53540c4c211f7af36e806bb045ba7da8946bb221d87144c12c83d577",
+      "origin": "plex-sans"
+    },
+    "fonts/ibm-plex-serif-600-latin1.woff2": {
+      "sha256": "c1487f9484cc8f04c656f7f074724154a04fdefd2ce7ffeab653f517bb4d366d",
       "origin": "plex-serif"
     },
-    "fonts/ibm-plex-serif-latin-ext-600-normal.woff2": {
-      "sha256": "3c56fe27718921294dd8573acbe5a2822d34dd55f5313437514e8bb33e00a6b7",
+    "fonts/ibm-plex-serif-600-latin2.woff2": {
+      "sha256": "63d1b268fcad01ebce5c15786173da2386a73664b984c753d70edb2a047460e3",
       "origin": "plex-serif"
     },
     "icons/arrow-down.svg": {

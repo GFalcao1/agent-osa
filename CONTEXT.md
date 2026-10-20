@@ -46,7 +46,7 @@ Página web local de configuração (FastAPI + HTML) em `127.0.0.1:8765`. Sem au
 _Evitar_: dashboard, console, backoffice
 
 **Confirmação**:
-Passo que o painel coloca antes de desativar um item ou remover um alias: o primeiro envio devolve a mesma página com uma faixa que nomeia o item e dois botões (confirmar e cancelar), e só o envio com `confirmar=1` altera o cadastro. Ativar não pede confirmação.
+Passo que o painel coloca antes de desativar um item ou remover um alias: o primeiro envio devolve a mesma página com uma faixa que nomeia o item e dois botões (confirmar e cancelar), e só o envio com `confirmar=1` altera o cadastro. Ativar não pede confirmação, e uma desativação que o cadastro sempre recusaria (o último administrador ativo) é recusada direto, sem a pergunta.
 _Evitar_: diálogo, aviso
 
 **Manual de uso**:

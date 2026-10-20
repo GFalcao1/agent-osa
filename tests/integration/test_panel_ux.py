@@ -371,6 +371,12 @@ DEACTIVATE = (
     ("user", "/users/{id}/ativo", "Desativar o usuário", "usuario-desativado", User),
 )  # fmt: skip
 
+# where each confirmed deactivation lands: the page of its own section
+DONE = {
+    "root": "/roots", "folder": "/roots", "department": "/departments",
+    "owner": "/owners/{id}", "user": "/users",
+}  # fmt: skip
+
 
 @pytest.mark.parametrize(("key", "path", "question", "flash", "model"), DEACTIVATE)
 def test_every_deactivation_asks_first_and_only_the_confirmation_deactivates(
@@ -393,8 +399,9 @@ def test_every_deactivation_asks_first_and_only_the_confirmation_deactivates(
 
     _, location = web.post(target, ativo="0", confirmar="1")
 
-    assert location.startswith(f"/{location.split('/')[1].split('?')[0]}")
-    assert f"ok={flash}" in location and f"id={ids[key]}" in location
+    path_part, _, query = location.partition("?")
+    assert path_part == DONE[key].format(id=ids[key])
+    assert query == f"ok={flash}&id={ids[key]}"
     with web.db() as session:
         assert session.get(model, ids[key]).ativo is False  # type: ignore[attr-defined]
     assert web.audits() == before + 1
@@ -416,20 +423,42 @@ def test_activating_needs_no_confirmation(
         assert session.get(model, ids[key]).ativo is True  # type: ignore[attr-defined]
 
 
-def test_deactivating_the_last_administrator_is_still_refused_after_the_confirmation(
+def test_deactivating_the_last_administrator_is_refused_without_asking_first(
     web: Panel,
 ) -> None:
     bootstrap(web)
     with web.db() as session:
         admin = session.scalars(select(User)).one()
+    before = web.audits()
 
+    # no "are you sure?" for an action the service would refuse anyway: the domain error, now
     code, page, _ = web.raw_post(f"/users/{admin.id}/ativo", ativo="0")
-    assert code == 200 and "Desativar o usuário" in page
-    code, page, _ = web.raw_post(f"/users/{admin.id}/ativo", ativo="0", confirmar="1")
 
-    assert code == 409 and "último administrador" in page and "Nada foi salvo." in page
+    assert code == 409 and 'class="confirm"' not in page and "Desativar o usuário" not in page
+    assert "não é possível desativar o último administrador ativo" in page
+    assert "Nada foi salvo." in page
+    # a forged confirmation gets the same refusal
+    code, page, _ = web.raw_post(f"/users/{admin.id}/ativo", ativo="0", confirmar="1")
+    assert code == 409 and 'class="confirm"' not in page and "último administrador" in page
     with web.db() as session:
         assert session.get(User, admin.id).ativo is True  # type: ignore[union-attr]
+    assert web.audits() == before
+
+
+def test_an_unknown_owner_is_not_found_without_claiming_there_are_no_owners(
+    web: Panel,
+) -> None:
+    bootstrap(web)
+    web.post("/owners", nome_fantasia="Alfa Comercio")
+
+    page = web.get("/owners/99999", status=404)
+
+    assert "dono não encontrado" in page and "Nada foi salvo." in page
+    assert "Alfa Comercio" in page  # the real list, not an empty one
+    assert "Nenhum dono cadastrado." not in page and "Cadastrar o primeiro dono" not in page
+    code, page, _ = web.raw_post("/owners/99999/ativo", ativo="0")
+    assert code == 404 and "dono não encontrado" in page and "Alfa Comercio" in page
+    assert "Nenhum dono cadastrado." not in page
 
 
 def test_deactivating_something_that_does_not_exist_is_the_old_not_found(web: Panel) -> None:
@@ -699,7 +728,8 @@ def test_every_visible_control_has_a_label_or_an_aria_label(web: Panel, tmp_path
             assert (
                 'aria-label="' in tag
                 or (control_id and control_id.group(1) in labelled)
-                or ("<label" in page and 'type="checkbox"' in tag)
+                # a checkbox wrapped by its own visible label
+                or ('type="checkbox"' in tag and f'<label class="check">{tag}' in page)
             ), (path, tag)
 
 
@@ -874,6 +904,6 @@ def test_pages_preload_the_main_font_and_load_no_remote_resource(
         head = page.split("</head>")[0]
 
         assert len(re.findall(r'<link rel="preload"[^>]*as="font"[^>]*crossorigin>', head)) == 2
-        for stem in ("ibm-plex-sans-latin-wght-normal", "ibm-plex-serif-latin-600-normal"):
+        for stem in ("ibm-plex-sans-400-latin1", "ibm-plex-serif-600-latin1"):
             assert re.search(rf'href="/fonts/{stem}\.[0-9a-f]{{10}}\.woff2"', head), stem
         assert not re.search(r'(?:src|href)="https?:', page), path
