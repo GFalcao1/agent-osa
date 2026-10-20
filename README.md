@@ -61,7 +61,7 @@ conta de serviço.
 
 Python 3.12, python-telegram-bot, FastAPI (painel local), PostgreSQL com
 SQLAlchemy e Alembic, Ollama com Gemma 3 12B atrás de uma interface
-`LLMProvider`, PyMuPDF, python-docx, openpyxl, OCR local, structlog, pytest,
+`LLMProvider`, pypdfium2, python-docx, openpyxl, RapidOCR (OCR local), structlog, pytest,
 Ruff e mypy.
 
 ## Entregas

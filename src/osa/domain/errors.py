@@ -31,3 +31,10 @@ class SensitiveFile(DomainError):
 
 class Unsupported(DomainError):
     """The file format has no implemented extraction."""
+
+
+class ExtractionFailed(DomainError):
+    """Content extraction failed (corrupt, protected, oversized or hostile file).
+
+    The message names the kind of problem and never carries document content.
+    """
