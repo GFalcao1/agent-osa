@@ -6,6 +6,12 @@ famílias de fonte com a SIL Open Font License 1.1. O texto completo de cada
 licença está abaixo. Versões e hashes de integridade do registro npm estão
 fixados em `src/osa/panel/static/MANIFEST.json`.
 
+A extração de documentos (TASK-105) usa ainda pacotes Python que o `uv sync`
+instala a partir do PyPI; eles não ficam no repositório. A seção "Dependências
+Python da extração de documentos" lista os principais, com a licença declarada
+por cada pacote; o texto completo de cada licença acompanha o pacote instalado
+(`*.dist-info/licenses`).
+
 ## Phosphor Icons
 
 - Pacote: `@phosphor-icons/core` versão **2.1.1**
@@ -439,6 +445,34 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
+
+## Dependências Python da extração de documentos
+
+Versões fixadas em `uv.lock`. Licença conforme os metadados e os arquivos de licença de
+cada pacote. A escolha de cada um está em `docs/adr/0010-pdf-e-ocr-locais.md`.
+
+| Pacote | Versão | Licença | Uso |
+|---|---|---|---|
+| pypdfium2 | 5.14.0 | BSD-3-Clause ou Apache-2.0; o binário do PDFium traz as licenças próprias em `licenses/data/*/BUILD_LICENSES` | texto e imagem de páginas de PDF |
+| python-docx | 1.2.0 | MIT | DOCX |
+| openpyxl (e et-xmlfile 2.0.0) | 3.1.5 | MIT | XLSX |
+| lxml | 6.1.3 | BSD-3-Clause (libxml2 e libxslt sob MIT) | análise de XML (via python-docx) |
+| defusedxml | 0.7.1 | Python Software Foundation License | recusa DTD e entidades em XML de OOXML |
+| Pillow | 13.0.0 | MIT-CMU (HPND) | decodificação de imagens |
+| pi-heif | 1.4.0 | código BSD-3-Clause; a wheel embute libheif e libde265, ambas LGPL-3.0 | decodificação de HEIC |
+| RapidOCR | 3.10.0 | Apache-2.0; os modelos ONNX da wheel (PaddleOCR PP-OCRv6, direitos da Baidu e dos autores do PaddleOCR) também são Apache-2.0, ver `MODEL_LICENSES.md` no pacote | OCR local |
+| onnxruntime | 1.31.0 | MIT | execução dos modelos do OCR |
+| opencv-python-headless | 5.0.0.93 | Apache-2.0 (a wheel embute bibliotecas de terceiros listadas em `LICENSE-3RD-PARTY.txt`) | pré-processamento do OCR |
+| numpy, shapely, pyclipper, omegaconf, protobuf, flatbuffers, colorlog, six, tqdm, requests e dependências | ver `uv.lock` | BSD-3-Clause, MIT, Apache-2.0; shapely embute o GEOS (LGPL-2.1) e tqdm é MPL-2.0 e MIT | dependências do RapidOCR e do onnxruntime |
+
+Atenção à LGPL: libheif e libde265 (em pi-heif) e GEOS (em shapely) são bibliotecas
+dinâmicas distribuídas dentro das wheels, sem modificação, e podem ser trocadas pelo
+usuário ao reinstalar o pacote. O projeto não as incorpora ao próprio código.
+
+Só desenvolvimento, nunca instalado em produção: **reportlab** 5.0.1 (BSD) gera os PDFs das
+fixtures de teste, e **pillow-heif** 1.8.1 (código BSD-3-Clause; as wheels embutem o
+codificador x265, GPLv2) escreve a fixture HEIC. Nenhum dos dois entra em
+`dependencies` do `pyproject.toml`, e nada do que geram é código deles.
 
 ## Conteúdo próprio
 
