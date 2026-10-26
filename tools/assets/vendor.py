@@ -9,9 +9,9 @@ Three sub-commands, all run from the repository root::
 ``fetch`` needs Node/npm and the network. It downloads each pinned tarball into a scratch
 directory, refuses it unless its sha512 equals the pinned registry integrity value, and
 copies only the files the panel uses: the Phosphor SVGs listed in ``ICONS``, the font files
-listed in ``FONTS`` (IBM Plex Sans, Serif and Mono, taken unmodified from the ``@fontsource``
-packages, with the OFL text of each) and the light
-SVG-renderer build of lottie-web (no expression engine, so no ``eval`` / ``new Function``).
+listed in ``FONTS`` (IBM Plex Sans, Serif and Mono, copied byte for byte from IBM's own
+``@ibm/plex-*`` packages, with the licence text of each) and the light SVG-renderer build of
+lottie-web (no expression engine, so no ``eval`` / ``new Function``).
 That build still carries an ``XMLHttpRequest`` loader (used only for ``path:``) and a Blob-URL
 ``Worker`` (used only after ``lottie.useWebWorker(true)``); neither is reachable, because
 ``motion.js`` passes ``animationData`` only and never calls ``useWebWorker`` (pinned by a
@@ -54,37 +54,37 @@ PINS: dict[str, dict[str, str]] = {
         "url": "https://github.com/phosphor-icons/core",
     },
     "plex-sans": {
-        "package": "@fontsource-variable/ibm-plex-sans",
-        "version": "5.3.0",
+        "package": "@ibm/plex-sans",
+        "version": "1.1.0",
         "integrity": (
-            "sha512-agG8tXFEo0hD9+J7npa4vbbWult52eMLVaQ6WQRlhs/iCAojrMAoejru85W9HTVXHfyUj96KM7gp"
-            "/KGAS87XaQ=="
+            "sha512-WPgvO6Yfj2w5YbhyAr1tv95RUz4LRJlqN+CmYvBglabXteufP1D1E9BABMde+ZIKdRbFJDoKF5eQzfhp"
+            "nbgZcQ=="
         ),
         "license": "OFL-1.1",
         "url": "https://github.com/IBM/plex",
-        "font_version": "3.201",
+        "font_version": "3.005",
     },
     "plex-serif": {
-        "package": "@fontsource/ibm-plex-serif",
-        "version": "5.3.0",
+        "package": "@ibm/plex-serif",
+        "version": "2.0.0",
         "integrity": (
-            "sha512-zwPfHB7EJbS5B8qnitPigJYzNdnt6PUeaoOA1gAAt//1pjpTVZN5sOU14NIAZ+C1xypL6GWsUG2VMYJW"
-            "9bhJqQ=="
+            "sha512-xVu9JsC18tBoQF2M6fofpsWrHj5a94saxlOZbYmXoC0E3UfjgS1JlibgrnaUJjnkLlEyCpMgI2Pdhk"
+            "Dxijw0gA=="
         ),
         "license": "OFL-1.1",
         "url": "https://github.com/IBM/plex",
-        "font_version": "2.6",
+        "font_version": "3.006",
     },
     "plex-mono": {
-        "package": "@fontsource/ibm-plex-mono",
-        "version": "5.3.0",
+        "package": "@ibm/plex-mono",
+        "version": "2.5.0",
         "integrity": (
-            "sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMV"
-            "fdZu7Q=="
+            "sha512-STBJIPxPomOYPmBMO7z5TKPJUotAF9u3gAUumTqVgwgrAO+K4FRNh0MlhsoJjKhJKsMbBJR10/bk4i"
+            "nkj/wc1w=="
         ),
         "license": "OFL-1.1",
         "url": "https://github.com/IBM/plex",
-        "font_version": "2.3",
+        "font_version": "2.005",
     },
     "lottie": {
         "package": "lottie-web",
@@ -130,33 +130,36 @@ ICONS: dict[str, tuple[str, ...]] = {
 LOTTIE_FILES = ("check", "spinner", "theme")
 
 # Fonts: file under static/fonts/ -> (pin key, file inside the package). Shipped byte for byte
-# as the @fontsource packages publish them (IBM Plex Sans variable for text and controls, IBM
-# Plex Serif 600 for titles and counts, IBM Plex Mono 400 for folders and codes). None of the
-# three declares a Reserved Font Name (licence header and the fonts' own copyright string), and
-# nothing is subset, converted or renamed here, so the OFL conditions reduce to shipping the
-# licence text.
+# as IBM, the copyright holder, publishes them in its own npm packages (``fonts/split/woff2``:
+# IBM's own web builds, cut by IBM into character-range subsets). Files produced and published
+# by the copyright holder are not third-party "Modified Versions" under the OFL, so they keep
+# their internal names; only the local file names are lower-cased here. Used: IBM Plex Sans
+# 400/500/600 for text and controls (IBM publishes no variable web build), IBM Plex Serif 600
+# for titles and counts, IBM Plex Mono 400 for folders and codes. "Latin1" is what every page
+# needs; "Latin2" (Latin extended) is only fetched for a character in its ``unicode-range``. The
+# panel CSS still exposes neutral family aliases ("Panel Sans", "Panel Serif", "Panel Mono"; a
+# test refuses "Plex" in any font-family), and the licence text of each package (IBM's
+# ``LICENSE.txt``, Reserved Font Name line included) ships next to the files.
+_SPLIT = "fonts/split/woff2"
 FONT_PACKAGES = ("plex-sans", "plex-serif", "plex-mono")
 FONTS: dict[str, tuple[str, str]] = {
-    "ibm-plex-sans-latin-wght-normal.woff2": (
-        "plex-sans",
-        "files/ibm-plex-sans-latin-wght-normal.woff2",
-    ),
-    "ibm-plex-sans-latin-ext-wght-normal.woff2": (
-        "plex-sans",
-        "files/ibm-plex-sans-latin-ext-wght-normal.woff2",
-    ),
-    "ibm-plex-serif-latin-600-normal.woff2": (
+    **{
+        f"ibm-plex-sans-{weight}-{subset.lower()}.woff2": (
+            "plex-sans",
+            f"{_SPLIT}/IBMPlexSans-{style}-{subset}.woff2",
+        )
+        for weight, style in (("400", "Regular"), ("500", "Medium"), ("600", "SemiBold"))
+        for subset in ("Latin1", "Latin2")
+    },
+    "ibm-plex-serif-600-latin1.woff2": (
         "plex-serif",
-        "files/ibm-plex-serif-latin-600-normal.woff2",
+        f"{_SPLIT}/IBMPlexSerif-SemiBold-Latin1.woff2",
     ),
-    "ibm-plex-serif-latin-ext-600-normal.woff2": (
+    "ibm-plex-serif-600-latin2.woff2": (
         "plex-serif",
-        "files/ibm-plex-serif-latin-ext-600-normal.woff2",
+        f"{_SPLIT}/IBMPlexSerif-SemiBold-Latin2.woff2",
     ),
-    "ibm-plex-mono-latin-400-normal.woff2": (
-        "plex-mono",
-        "files/ibm-plex-mono-latin-400-normal.woff2",
-    ),
+    "ibm-plex-mono-400-latin1.woff2": ("plex-mono", f"{_SPLIT}/IBMPlexMono-Regular-Latin1.woff2"),
 }
 # Licence text shipped next to the fonts (the OFL asks every copy to carry it).
 FONT_LICENSES: dict[str, str] = {
@@ -221,7 +224,7 @@ def fetch() -> None:
         for target, (key, inside) in FONTS.items():
             shutil.copyfile(packs[key] / inside, fonts / target)
         for target, key in FONT_LICENSES.items():
-            shutil.copyfile(packs[key] / "LICENSE", fonts / target)
+            shutil.copyfile(packs[key] / "LICENSE.txt", fonts / target)
     print("fetched; now run: manifest")
 
 

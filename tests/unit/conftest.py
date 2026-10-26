@@ -1,16 +1,24 @@
-"""Fixtures compartilhadas pelos testes unitários de filesystem (só dados fictícios)."""
+"""Fixtures compartilhadas pelos testes unitários (só dados fictícios).
+
+Reúne as fixtures de filesystem (TASK-104) e as de extração (TASK-105).
+"""
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import stat
+import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from osa.fs import noreplace
 from osa.fs.errors import NoReplaceUnavailable
+
+# --- filesystem -------------------------------------------------------------
 
 Snapshot = dict[str, tuple[str, int, int, int]]
 
@@ -72,3 +80,26 @@ def require_noreplace(root: Path) -> None:
         pytest.skip(f"volume de teste sem rename exclusivo comprovado: {error}")
     finally:
         os.close(fd)
+
+
+# --- extração ---------------------------------------------------------------
+
+FIXTURES_SCRIPT = Path(__file__).resolve().parents[1] / "fixtures" / "make_fixtures.py"
+
+
+@pytest.fixture(scope="session")
+def fixture_maker() -> ModuleType:
+    """O módulo ``make_fixtures`` (tests/fixtures não é um pacote)."""
+    spec = importlib.util.spec_from_file_location("osa_make_fixtures", FIXTURES_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["osa_make_fixtures"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="session")
+def docs(tmp_path_factory: pytest.TempPathFactory, fixture_maker: ModuleType) -> dict[str, Path]:
+    """Todos os documentos fictícios, gerados uma vez por sessão em diretório temporário."""
+    built: dict[str, Path] = fixture_maker.build(tmp_path_factory.mktemp("docs"))
+    return built

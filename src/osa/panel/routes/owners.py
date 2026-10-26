@@ -39,9 +39,8 @@ def _detail_page(
 ) -> Response:
     owner = session.get(Owner, owner_id)
     if owner is None:
-        return render(
-            request, session, "owners.html", {"owners": []}, error="dono não encontrado", status=404
-        )
+        # the real list, so the page never claims "no owners" when there are some
+        return _list_page(request, session, error="dono não encontrado", status=404)
     aliases = list(
         session.scalars(
             select(OwnerAlias).where(OwnerAlias.owner_id == owner_id).order_by(OwnerAlias.alias)

@@ -12,9 +12,11 @@ monitorada recebe o mesmo tratamento para arquivos largados direto no servidor.
 
 ## Estado atual
 
-Spec v1 aprovada em 2026-10-15 após revisão de direção. Nenhuma task v1
-implementada. O código presente é a fundação de configuração aceita no plano
-v0, que a TASK-101 adapta.
+Spec v1 aprovada em 2026-10-15 após revisão de direção. TASK-101 (fundação:
+configuração, logs e CLI), TASK-102 (banco, modelo de dados e auditoria) e
+TASK-103 (cadastro, painel local e bootstrap) estão implementadas em `main`; o
+aceite de cada gate fica no registro de execução da própria task. A próxima da
+ordem é a TASK-104 (filesystem seguro e primitiva de arquivamento).
 
 `docs/` e `tasks/` estão no `.gitignore` nesta fase; existem localmente.
 
@@ -61,7 +63,7 @@ conta de serviço.
 
 Python 3.12, python-telegram-bot, FastAPI (painel local), PostgreSQL com
 SQLAlchemy e Alembic, Ollama com Gemma 3 12B atrás de uma interface
-`LLMProvider`, PyMuPDF, python-docx, openpyxl, OCR local, structlog, pytest,
+`LLMProvider`, pypdfium2, python-docx, openpyxl, RapidOCR (OCR local), structlog, pytest,
 Ruff e mypy.
 
 ## Entregas
@@ -110,7 +112,7 @@ cabeçalhos de segurança do restante (a CSP não muda). Licenças em
   focar e no clique. O fundo é uma
   retícula fina com lavagens suaves de cor, uma camada por tema. Cartões e faixas têm sombra
   suave em camadas e um filete dourado no alto, que se alarga quando um cartão com link sobe
-  de leve sob o mouse; botões principais e os círculos numerados do manual têm um anel
+  de leve sob o mouse; botões principais e os quadrados numerados do manual têm um anel
   dourado fino por dentro. Cantos quase retos: 2 px em controles, selos e etiquetas, 3 px
   em alertas e caixas pequenas, 4 px em cartões; só a bolinha da chave de tema é redonda. São melhoria progressiva: sem
   JavaScript, ou se um arquivo não carregar, a tela mostra o ícone estático e o
@@ -124,41 +126,46 @@ cabeçalhos de segurança do restante (a CSP não muda). Licenças em
 
 ### Fontes e tipografia
 
-Texto, controles e interface usam **IBM Plex Sans** (variável; o painel usa os pesos
-400, 500 e 600); títulos de página, títulos de cartão, legendas de formulário e os
+Texto, controles e interface usam **IBM Plex Sans** (pesos 400, 500 e 600, um arquivo
+estático por peso); títulos de página, títulos de cartão, legendas de formulário e os
 números da página inicial usam **IBM Plex Serif** (peso 600); pastas e códigos usam
-**IBM Plex Mono** (peso 400). As três têm licença SIL OFL 1.1 (texto completo e
-linhas de copyright em `THIRD_PARTY_NOTICES.md`); nenhuma declara Reserved Font Name
-(nem no cabeçalho da licença nem na linha de copyright gravada na fonte) e os
-arquivos WOFF2 são os dos pacotes `@fontsource`, copiados sem alteração, com o texto
-da licença ao lado em `src/osa/panel/static/fonts/`.
+**IBM Plex Mono** (peso 400). Os arquivos WOFF2 são os que a própria IBM, detentora do
+copyright, gera e publica nos pacotes oficiais `@ibm/plex-sans` 1.1.0, `@ibm/plex-serif`
+2.0.0 e `@ibm/plex-mono` 2.5.0 (recortes `Latin1` e `Latin2` de `fonts/split/woff2`),
+copiados sem alteração, com o `LICENSE.txt` de cada pacote ao lado em
+`src/osa/panel/static/fonts/`. As três têm licença SIL OFL 1.1 com Reserved Font Name
+"Plex" (texto completo e linhas de copyright em `THIRD_PARTY_NOTICES.md`); como não há
+versão modificada, o nome interno das fontes fica como a IBM gravou. O CSS do painel
+declara as famílias com apelidos neutros ("Panel Sans", "Panel Serif", "Panel Mono" e as
+faces de reserva "... Fallback"), que não colidem com uma fonte instalada; o crédito à
+IBM fica nos avisos.
 
 - **Uma chave**: `DISPLAY` em `src/osa/panel/styles.py`. `"serif"` (padrão) põe a
   serifada nos títulos e números; `"sans"` deixa tudo em IBM Plex Sans. A serifada
   nunca vai para texto pequeno de interface nem para campos de formulário.
-- **Tamanho**: no primeiro carregamento vão só os arquivos latinos: 45 712 B (Sans),
-  20 516 B (Serif) e 14 708 B (Mono), cerca de 79 KB (61 KB com `"sans"`); os
-  latinos estendidos da Sans (30 964 B) e da Serif (15 560 B) só descem quando uma
-  página usa um desses caracteres (`unicode-range`). O navegador só baixa uma face
-  que a página usa.
+- **Tamanho**: no primeiro carregamento vão só os arquivos `latin1`: Sans 20 984 B (400),
+  21 960 B (500) e 22 260 B (600), Serif 24 016 B e Mono 17 544 B, cerca de 104 KiB
+  (81 KiB com `"sans"`); os `latin2` (latino estendido) da Sans (15 212 B, 15 372 B e
+  15 624 B) e da Serif (16 144 B) só descem quando uma página usa um desses caracteres
+  (`unicode-range`). O navegador só baixa uma face que a página usa.
 - **Rota**: `/fonts/<nome>.<hash>.woff2`, uma rota de caminho exato por arquivo, sob
   os mesmos filtros de peer e `Host`. O hash são os dez primeiros dígitos do sha256
-  do arquivo, lidos do manifesto; por isso essas cinco respostas, e só elas, saem com
+  do arquivo, lidos do manifesto; por isso essas nove respostas, e só elas, saem com
   `Cache-Control: private, max-age=31536000, immutable`. Todo o resto continua
   `no-store`.
 - **CSS**: nenhuma diretiva `font-src` (cai em `default-src 'self'`); `@font-face`
-  com `font-display: swap`, `<link rel="preload">` da Sans e (com `"serif"`) da
-  Serif, e uma face de reserva por família com as métricas da fonte (Arial, Georgia
-  e Courier New ajustadas; sem salto de layout). Família, escala, três pesos,
-  entrelinhas e espaçamento de letras são variáveis CSS; um teste recusa qualquer
-  fonte, tamanho ou peso escrito fora delas.
+  com `font-display: swap` e o `unicode-range` exato de cada recorte da IBM,
+  `<link rel="preload">` da Sans 400 e (com `"serif"`) da Serif, e uma face de reserva
+  por família com as métricas da fonte (Arial, Georgia e Courier New ajustadas; sem
+  salto de layout). Família, escala, três pesos, entrelinhas e espaçamento de letras
+  são variáveis CSS; um teste recusa qualquer fonte, tamanho ou peso escrito fora delas.
 
 Atualizar uma fonte (precisa de Node/npm e rede): troque a versão e a integridade do
-pacote (`npm view @fontsource-variable/ibm-plex-sans@<versão> dist.integrity`, e o
-mesmo para `@fontsource/ibm-plex-serif` e `@fontsource/ibm-plex-mono`) em `PINS` de
-`tools/assets/vendor.py` e rode `fetch`, `manifest` e `check` como acima. Confira no
-`LICENSE` do pacote e na linha de copyright da fonte que nenhum nome reservado foi
-declarado. O hash no nome do arquivo muda sozinho, o que invalida o cache dos
+pacote (`npm view @ibm/plex-sans@<versão> dist.integrity`, e o mesmo para
+`@ibm/plex-serif` e `@ibm/plex-mono`) em `PINS` de `tools/assets/vendor.py` e rode
+`fetch`, `manifest` e `check` como acima. Use só pacotes publicados pela IBM: um recorte
+ou conversão feito por terceiros é "Modified Version" na OFL e não pode usar o nome
+reservado. O hash no nome do arquivo muda sozinho, o que invalida o cache dos
 navegadores. Trocar de família: os nomes lógicos (`sans-*`, `serif-*`, `mono-*`) em
 `src/osa/panel/assets.py` não mudam; mudam a tabela de arquivos, os pins e as regras
 `@font-face` de `styles.py`.
