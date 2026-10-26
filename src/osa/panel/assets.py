@@ -34,14 +34,20 @@ WOFF2: Final = "font/woff2"
 
 LOTTIE_NAMES: Final = ("check", "spinner", "theme")
 # Logical font name -> file under static/fonts/ (the exact set; nothing else is served).
-# The logical names (sans, serif, mono) are what the stylesheet and templates use, so changing a
-# typeface only touches this table, the vendor pins and the face rules in ``styles.py``.
+# The logical names (family, weight, IBM subset) are what the stylesheet and templates use, so
+# changing a typeface only touches this table, the vendor pins and the face rules in
+# ``styles.py``. "latin1" is IBM's Latin subset (every page); "latin2" is IBM's Latin-extended
+# subset, fetched only for a character in its ``unicode-range``.
 FONT_FILES: Final = {
-    "sans-latin": "ibm-plex-sans-latin-wght-normal.woff2",
-    "sans-latin-ext": "ibm-plex-sans-latin-ext-wght-normal.woff2",
-    "serif-latin": "ibm-plex-serif-latin-600-normal.woff2",
-    "serif-latin-ext": "ibm-plex-serif-latin-ext-600-normal.woff2",
-    "mono-latin": "ibm-plex-mono-latin-400-normal.woff2",
+    "sans-400-latin1": "ibm-plex-sans-400-latin1.woff2",
+    "sans-400-latin2": "ibm-plex-sans-400-latin2.woff2",
+    "sans-500-latin1": "ibm-plex-sans-500-latin1.woff2",
+    "sans-500-latin2": "ibm-plex-sans-500-latin2.woff2",
+    "sans-600-latin1": "ibm-plex-sans-600-latin1.woff2",
+    "sans-600-latin2": "ibm-plex-sans-600-latin2.woff2",
+    "serif-600-latin1": "ibm-plex-serif-600-latin1.woff2",
+    "serif-600-latin2": "ibm-plex-serif-600-latin2.woff2",
+    "mono-400-latin1": "ibm-plex-mono-400-latin1.woff2",
 }
 _HASH_LENGTH: Final = 10
 

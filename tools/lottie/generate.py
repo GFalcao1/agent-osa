@@ -28,7 +28,6 @@ from typing import Any
 OUT = Path(__file__).resolve().parents[2] / "src" / "osa" / "panel" / "static" / "lottie"
 FPS = 30
 SIZE = 64
-K = 0.5522847498  # circle bezier constant
 
 INK = [0.12, 0.23, 0.58, 1]  # fallback only (CSS paints currentColor)
 GOLD = [0.72, 0.56, 0.23, 1]

@@ -4,7 +4,8 @@ Portable (no database). These tests read the served ``/panel.css`` and refuse a 
 hard-coded font family, size, weight, line height or tracking and any change to the approved
 colour tokens. They also pin the card look the user asked to keep: a soft layered shadow, a
 thin gold edge along the top of cards and banners that widens on hover, the gold inner ring
-of primary buttons, radii of 6/8/12px and pills only on status badges and the theme switch.
+of primary buttons (following each theme's ``--gold``), nearly square corners (radii of
+2/3/4 px, no pill shapes) and a round knob only on the theme switch.
 """
 
 from __future__ import annotations
@@ -129,19 +130,20 @@ def test_the_serif_sets_only_titles_counts_and_card_titles_and_is_one_switch() -
     from osa.panel import styles
 
     assert LIGHT["font-display"] == "var(--serif)"  # variant B is the default
-    assert styles.DISPLAY == "serif" and styles.PRELOAD_FONTS == ("sans-latin", "serif-latin")
+    assert styles.DISPLAY == "serif"
+    assert styles.PRELOAD_FONTS == ("sans-400-latin1", "serif-600-latin1")
     display = [s.strip() for s, b in RULES if "font-family: var(--font-display)" in b]
     assert display == ["h1, h2, legend, .stat .value, .cta-title"]
     assert not any("var(--serif)" in b for s, b in RULES if s.strip() != ":root")  # one switch
     # the serif ships one weight (600); nothing set in it asks for more
-    assert "font-weight: 600" in CSS.split("Plex Serif Web")[1].split("}")[0]
+    assert "font-weight: 600" in CSS.split('font-family: "Panel Serif"')[1].split("}")[0]
     # variant A: the same sheet with the sans everywhere, and only the text face preloaded
     sans = styles.build("sans")
     assert re.search(r"--font-display: var\(--font\);", sans)
     assert sans.replace("--font-display: var(--font);", "") == CSS.replace(
         "--font-display: var(--serif);", ""
     )
-    assert styles.preload_fonts("sans") == ("sans-latin",)
+    assert styles.preload_fonts("sans") == ("sans-400-latin1",)
 
 
 def test_numbers_in_columns_and_identifiers_are_tabular_and_code_is_monospace() -> None:
@@ -222,8 +224,10 @@ def test_the_gold_edge_runs_along_cards_and_banners_and_widens_on_hover() -> Non
     assert "background: var(--gold-edge)" in banners
     hover = first[".card.lift:hover::before, a.card:hover::before"]
     assert "opacity: 1" in hover and "left: var(--sp-2)" in hover
-    # primary buttons and the numbered circles carry the fine gold inner ring
-    assert LIGHT["gold-ring"] == "inset 0 0 0 1px rgba(214, 178, 94, 0.55)"
+    # primary buttons and the numbered squares carry the fine gold inner ring
+    # the ring follows the theme's own --gold (no hard-coded dark gold in the light theme)
+    assert LIGHT["gold-ring"] == "inset 0 0 0 1px color-mix(in srgb, var(--gold) 55%, transparent)"
+    assert "gold-ring" not in tokens(block(':root[data-theme="dark"] {'))
     primary = first[".btn-primary, .btn-save.is-dirty"]
     assert "box-shadow: var(--gold-ring)" in primary
     assert "box-shadow: var(--gold-ring)" in first[".chapter-num"]
@@ -351,7 +355,7 @@ PAIRS = [
     ("blue-deep", "blue-soft", 4.5), ("blue-deep", "surface", 4.5),  # nav, notice, links
     ("blue-deep", "paper", 4.5), ("blue-deep", "surface-2", 4.5),
     ("red-deep", "red-soft", 4.5), ("red-deep", "surface", 4.5),  # badge-off, confirm title
-    ("red", "surface", 4.5), ("on-accent", "blue-solid", 4.5),  # btn-danger, primary / dirty save
+    ("red", "surface", 4.5), ("on-accent", "blue-solid", 4.5),  # red on cards, primary / dirty save
     ("on-accent", "blue-solid-hover", 4.5), ("on-accent", "red-solid", 4.5),  # confirm button
     ("control", "surface", 3.0), ("focus", "surface", 3.0), ("focus", "paper", 3.0),
     ("blue", "blue-soft", 3.0), ("red", "red-soft", 3.0),  # alert icons

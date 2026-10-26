@@ -257,7 +257,6 @@ def test_the_brand_follows_the_mouse_within_limits_smoothly_and_settles_back(
     assert run["queuedWhileResting"] == 0  # resting under the pointer: no work
     # Leaving brings it back gradually, to exact rest, and then stops asking for frames.
     assert abs(run["backFirst"]["x"] - run["mid"]["x"]) < 0.7  # starts from where it was
-    assert run["back"] == {"x": 0.0, "y": 0.0, "r": 0.0, "k": 1.0} or run["propsAfterRest"] == {}
     assert run["propsAfterRest"] == {} and run["activeAfterRest"] is False
     assert run["queuedAfterRest"] == 0
     assert run["usesOnlyCustomProps"] is True  # CSSOM custom properties, never a style attribute

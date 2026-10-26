@@ -38,11 +38,15 @@ EXPECTED_CSP = (
 # The font URLs carry the first ten hex digits of the file's sha256, so they are read from the
 # manifest here; the stems (which files may be served at all) are spelled out as a second copy.
 FONT_STEMS = {
-    "ibm-plex-sans-latin-wght-normal",
-    "ibm-plex-sans-latin-ext-wght-normal",
-    "ibm-plex-serif-latin-600-normal",
-    "ibm-plex-serif-latin-ext-600-normal",
-    "ibm-plex-mono-latin-400-normal",
+    "ibm-plex-sans-400-latin1",
+    "ibm-plex-sans-400-latin2",
+    "ibm-plex-sans-500-latin1",
+    "ibm-plex-sans-500-latin2",
+    "ibm-plex-sans-600-latin1",
+    "ibm-plex-sans-600-latin2",
+    "ibm-plex-serif-600-latin1",
+    "ibm-plex-serif-600-latin2",
+    "ibm-plex-mono-400-latin1",
 }
 IMMUTABLE_CACHE = "private, max-age=31536000, immutable"
 STATIC_PATHS = {
@@ -156,16 +160,19 @@ TRAVERSAL = [
     "/fonts/../MANIFEST.json",
     "/fonts/%2e%2e/MANIFEST.json",
     "/fonts/..%2fMANIFEST.json",
-    "/fonts/ibm-plex-sans-latin-wght-normal.woff2",  # no hash
-    "/fonts/ibm-plex-sans-latin-wght-normal.0000000000.woff2",  # wrong hash
+    "/fonts/ibm-plex-sans-400-latin1.woff2",  # no hash
+    "/fonts/ibm-plex-sans-400-latin1.0000000000.woff2",  # wrong hash
     "/fonts/OFL-ibm-plex-sans.txt",  # shipped, never served
     "/fonts/OFL-ibm-plex-serif.txt",
     "/fonts/OFL-ibm-plex-mono.txt",
-    "/fonts/ibm-plex-mono-latin-400-normal.woff2%00.png",
+    "/fonts/ibm-plex-mono-400-latin1.woff2%00.png",
     "/fonts/nope.woff2",
-    "/assets/fonts/ibm-plex-mono-latin-400-normal.woff2",
-    "/static/fonts/ibm-plex-mono-latin-400-normal.woff2",
-    "/fonts/ibm-plex-mono-latin-400-normal.woff2.map",
+    "/assets/fonts/ibm-plex-mono-400-latin1.woff2",
+    "/static/fonts/ibm-plex-mono-400-latin1.woff2",
+    "/fonts/ibm-plex-mono-400-latin1.woff2.map",
+    # the earlier third-party builds are gone
+    "/fonts/ibm-plex-sans-latin-wght-normal.woff2",
+    "/fonts/ibm-plex-mono-latin-400-normal.woff2",
     # the previous typefaces are gone: no route, no file
     "/fonts/instrument-sans-latin-wght-normal.2ee17598ab.woff2",
     "/fonts/geist-mono-latin-400-normal.3f98383b12.woff2",
@@ -289,10 +296,10 @@ def test_assets_cannot_be_posted_to() -> None:
 # --- fonts: self-hosted, hashed, immutable --------------------------------------------
 
 
-def test_the_font_allowlist_is_exactly_five_hashed_woff2_files() -> None:
+def test_the_font_allowlist_is_exactly_nine_hashed_woff2_files() -> None:
     served = {a.path for a in assets.ASSETS if a.path.startswith("/fonts/")}
 
-    assert served == set(FONT_PATHS.values()) and len(served) == 5
+    assert served == set(FONT_PATHS.values()) and len(served) == 9
     for stem, path in FONT_PATHS.items():
         digest = manifest()["files"][f"fonts/{stem}.woff2"]["sha256"]
         assert re.fullmatch(rf"/fonts/{re.escape(stem)}\.[0-9a-f]{{10}}\.woff2", path)
@@ -370,10 +377,10 @@ def test_a_tampered_or_missing_font_stops_the_panel_from_starting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     target = _copy_static(tmp_path)
-    victim = target / "fonts" / "ibm-plex-mono-latin-400-normal.woff2"
+    victim = target / "fonts" / "ibm-plex-mono-400-latin1.woff2"
     victim.write_bytes(victim.read_bytes() + b"\x00")
     monkeypatch.setattr(assets, "STATIC_DIR", target)
-    with pytest.raises(assets.AssetIntegrityError, match=r"ibm-plex-mono-latin-400-normal"):
+    with pytest.raises(assets.AssetIntegrityError, match=r"ibm-plex-mono-400-latin1"):
         make_client()
 
     victim.unlink()
@@ -386,7 +393,7 @@ def test_a_font_missing_from_the_manifest_is_refused(
 ) -> None:
     target = _copy_static(tmp_path)
     data = json.loads((target / "MANIFEST.json").read_text())
-    del data["files"]["fonts/ibm-plex-sans-latin-wght-normal.woff2"]
+    del data["files"]["fonts/ibm-plex-sans-400-latin1.woff2"]
     (target / "MANIFEST.json").write_text(json.dumps(data))
     monkeypatch.setattr(assets, "STATIC_DIR", target)
 
@@ -415,21 +422,22 @@ def test_fonts_are_shipped_byte_for_byte_with_their_licence_and_inside_the_budge
         *(f"{stem}.woff2" for stem in FONT_STEMS),
         *LICENCES,
     }
-    # first load: the Latin face of each family (the Latin-extended ones are unicode-range lazy)
+    # first load: the Latin1 file of every face (sans 400/500/600, serif 600, mono 400); the
+    # Latin2 (Latin-extended) ones are unicode-range lazy
     first_load = sum(
         (STATIC / f"fonts/{stem}.woff2").stat().st_size
         for stem in FONT_STEMS
-        if "latin-ext" not in stem
+        if stem.endswith("-latin1")
     )
     assert first_load <= 120 * 1024, first_load
     for licence in LICENCES:
         text = (STATIC / "fonts" / licence).read_text(encoding="utf-8")
-        assert "SIL OPEN FONT LICENSE Version 1.1" in text and "IBM Corp." in text
-        # no Reserved Font Name declared in the copyright header (the OFL body defines the term)
-        assert "Reserved Font Name" not in text.split("PREAMBLE")[0].split("SIL OPEN FONT")[0]
-    assert sources["plex-sans"]["font_version"] == "3.201"
-    assert sources["plex-serif"]["font_version"] == "2.6"
-    assert sources["plex-mono"]["font_version"] == "2.3"
+        # IBM's own LICENSE.txt, in full: the copyright and Reserved Font Name line and the OFL
+        assert 'Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"' in text
+        assert "SIL OPEN FONT LICENSE Version 1.1" in text
+    assert sources["plex-sans"]["font_version"] == "3.005"
+    assert sources["plex-serif"]["font_version"] == "3.006"
+    assert sources["plex-mono"]["font_version"] == "2.005"
 
 
 def test_the_stylesheet_loads_the_fonts_by_hash_with_swap_and_metric_fallbacks() -> None:
@@ -438,14 +446,17 @@ def test_the_stylesheet_loads_the_fonts_by_hash_with_swap_and_metric_fallbacks()
 
     web = [f for f in faces if "src: url(" in f]
     fallback = [f for f in faces if "src: local(" in f]
-    assert len(faces) == 8 and len(web) == 5 and len(fallback) == 3
+    assert len(faces) == 12 and len(web) == 9 and len(fallback) == 3
     for face in web:
         assert "font-display: swap" in face and 'format("woff2")' in face
         assert "unicode-range:" in face
     urls = re.findall(r'url\("([^"]+)"\)', css)
     assert sorted(urls) == sorted(FONT_PATHS.values())
     families = [re.search(r'font-family: "([^"]+)"', f).group(1) for f in web]  # type: ignore[union-attr]
-    assert families == ["Plex Sans Web"] * 2 + ["Plex Serif Web"] * 2 + ["Plex Mono Web"]
+    assert families == ["Panel Sans"] * 6 + ["Panel Serif"] * 2 + ["Panel Mono"]
+    # one static weight per face (no synthesized weights), Latin1 then Latin2
+    weights = [re.search(r"font-weight: (\d+);", f).group(1) for f in web]  # type: ignore[union-attr]
+    assert weights == ["400", "400", "500", "500", "600", "600", "600", "600", "400"]
     for face, local in zip(fallback, ("Arial", "Georgia", "Courier New"), strict=True):
         assert f'local("{local}")' in face
         for descriptor in (
@@ -459,9 +470,22 @@ def test_the_stylesheet_loads_the_fonts_by_hash_with_swap_and_metric_fallbacks()
     assert "data:" not in css
     assert "Instrument" not in css and "Geist" not in css
     # each web face comes first in its stack, then its metric-compatible fallback
-    assert re.search(r'--font: "Plex Sans Web", "Plex Sans Fallback"', css)
-    assert re.search(r'--serif: "Plex Serif Web", "Plex Serif Fallback"', css)
-    assert re.search(r'--mono: "Plex Mono Web", "Plex Mono Fallback"', css)
+    assert re.search(r'--font: "Panel Sans", "Panel Sans Fallback"', css)
+    assert re.search(r'--serif: "Panel Serif", "Panel Serif Fallback"', css)
+    assert re.search(r'--mono: "Panel Mono", "Panel Mono Fallback"', css)
+
+
+def test_no_exposed_font_family_uses_the_reserved_font_name() -> None:
+    # Upstream IBM Plex declares Reserved Font Name "Plex". The shipped files are IBM's own
+    # builds (not third-party Modified Versions), but the panel still declares and asks for
+    # neutral aliases only; the fonts are credited, by their real name, in the notices.
+    css = make_client().get("/panel.css").text
+    declared = re.findall(r"font-family:\s*([^;]+);", css)
+    stacks = re.findall(r"--(?:font|serif|mono):\s*([^;]+);", css)
+    assert declared and len(stacks) == 3
+    for value in (*declared, *stacks):
+        assert "plex" not in value.lower(), value
+    assert "plex" not in css.lower().replace("/fonts/ibm-plex-", "/fonts/")
 
 
 def test_every_page_preloads_the_text_face_and_the_title_face_with_crossorigin() -> None:
@@ -470,8 +494,8 @@ def test_every_page_preloads_the_text_face_and_the_title_face_with_crossorigin()
 
     links = re.findall(r'<link rel="preload"[^>]*>', head)
     expected = [
-        FONT_PATHS["ibm-plex-sans-latin-wght-normal"],
-        FONT_PATHS["ibm-plex-serif-latin-600-normal"],
+        FONT_PATHS["ibm-plex-sans-400-latin1"],
+        FONT_PATHS["ibm-plex-serif-600-latin1"],
     ]
     assert links == [
         f'<link rel="preload" href="{path}" as="font" type="font/woff2" crossorigin>'
@@ -657,9 +681,9 @@ def test_stylesheet_repaints_animations_with_theme_tokens() -> None:
         ".lt-stroke path",
         ".lt-fill path",
         ".lt-gold-fill path",
-        ".lt-gold-stroke path",
     ):
         assert selector in css
+    assert ".lt-gold-stroke" not in css  # no animation layer uses it
     assert "http://" not in css and "https://" not in css and "@import" not in css
     assert "@media (prefers-reduced-motion: reduce)" in css
 
@@ -714,9 +738,10 @@ def test_manifest_pins_every_package_with_version_licence_and_registry_integrity
         assert source["url"].startswith("https://github.com/")
     assert sources["phosphor"]["package"] == "@phosphor-icons/core"
     assert sources["lottie"]["package"] == "lottie-web"
-    assert sources["plex-sans"]["package"] == "@fontsource-variable/ibm-plex-sans"
-    assert sources["plex-serif"]["package"] == "@fontsource/ibm-plex-serif"
-    assert sources["plex-mono"]["package"] == "@fontsource/ibm-plex-mono"
+    # IBM's own packages (the copyright holder's web builds), not third-party repackagings
+    assert sources["plex-sans"]["package"] == "@ibm/plex-sans"
+    assert sources["plex-serif"]["package"] == "@ibm/plex-serif"
+    assert sources["plex-mono"]["package"] == "@ibm/plex-mono"
     assert sources["lottie"]["file"].endswith("lottie_light.min.js")  # no expression engine
 
 
@@ -744,18 +769,30 @@ def test_third_party_notices_list_every_package_with_its_version_and_licence() -
         assert source["url"] in text
     assert text.count("Permission is hereby granted, free of charge") >= 2
     assert "Phosphor Icons" in text and "lottie-web" in text
-    # SIL OFL 1.1, in full, once per typeface, with each upstream copyright line
+    # SIL OFL 1.1, in full, once per typeface (IBM's LICENSE.txt), with the copyright line
+    # each font carries
     assert text.count("SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007") == 3
     assert text.count("PERMISSION & CONDITIONS") == 3 and text.count("DISCLAIMER") >= 3
     for line in (
-        "Copyright 2019 IBM Corp.",
-        "Copyright 2020 IBM Corp.",
-        "Copyright 2017 IBM Corp.",
+        "Copyright 2018 IBM Corp. All rights reserved.",
+        "Copyright 2020 IBM Corp. All rights reserved.",
+        "Copyright 2017 IBM Corp. All rights reserved.",
     ):
         assert line in text, line
     assert "IBM Plex Sans" in text and "IBM Plex Serif" in text and "IBM Plex Mono" in text
-    assert "Instrument Sans" not in text and "Geist" not in text
-    assert "Reserved Font Name" in text  # says none is declared, and what that means here
+    assert "Instrument Sans" not in text and "Geist" not in text and "fontsource" not in text
+    # the Reserved Font Name line is stated (in each section and each licence text), and the
+    # files are the copyright holder's own builds, unmodified
+    assert text.count('Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"') == 6
+    assert text.count('a licença declara Reserved Font Name "Plex"') == 3
+    assert (
+        text.count(
+            "Modificação: nenhuma; arquivos produzidos e publicados pelo detentor do copyright."
+        )
+        == 3
+    )
+    for family in ("Sans", "Serif", "Mono"):
+        assert f'"Panel {family}" e "Panel {family} Fallback"' in text, family
 
 
 # --- Phosphor icons ---------------------------------------------------------------------
@@ -1097,7 +1134,7 @@ def test_lottie_file_is_small_valid_and_expression_free(name: str) -> None:
     for layer in doc["layers"]:
         assert layer["ty"] == 4  # shape layers only: no image, text, precomp, null, solid
         assert 0 <= layer["ip"] < layer["op"] <= doc["op"]
-        assert layer["cl"] in {"lt-stroke", "lt-fill", "lt-gold-fill", "lt-gold-stroke"}
+        assert layer["cl"] in {"lt-stroke", "lt-fill", "lt-gold-fill"}
         assert "ef" not in layer and "masksProperties" not in layer
     for node in _walk(doc):
         if isinstance(node, dict):
