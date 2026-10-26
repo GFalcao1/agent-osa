@@ -37,10 +37,10 @@ osa = "osa.cli:main"
 [dependency-groups]
 dev = [
   "httpx>=0.27,<1",
-  "mypy>=1.14,<2",
+  "mypy>=1.14,<3",
   # The pillow-heif wheels bundle a GPLv2 encoder: dev only, to write the HEIC fixture.
   "pillow-heif>=1.8,<2",
-  "pytest>=8.3,<9",
+  "pytest>=8.3,<10",
   "reportlab>=4.2,<6",
   "ruff>=0.9,<1",
   "types-openpyxl>=3.1,<4",
