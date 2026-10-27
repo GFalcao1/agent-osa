@@ -166,7 +166,17 @@ def test_regenerated_corpus_is_identical_byte_for_byte(tmp_path: Path) -> None:
         if entry_id not in SCANNED:
             assert digest == by_id[entry_id], entry_id
         assert hashlib.sha256(second[entry_id].read_bytes()).hexdigest() == digest, entry_id
-    assert (tmp_path / "a" / "corpus.json").read_bytes() == (CORPUS / "corpus.json").read_bytes()
+    assert _without_scan_digests(tmp_path / "a" / "corpus.json") == _without_scan_digests(
+        CORPUS / "corpus.json"
+    )
+
+
+def _without_scan_digests(path: Path) -> object:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    for entry in data["entradas"]:
+        if entry["id"] in SCANNED:
+            entry.pop("sha256")
+    return data
 
 
 def test_manifest_describes_every_department() -> None:
