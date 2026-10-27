@@ -26,6 +26,10 @@ _Evitar_: dono inferido pelo modelo
 Nível fixo abaixo do dono na árvore, definido pelo template da instalação; também o setor de um usuário.
 _Evitar_: categoria, setor (para a pasta), subpasta
 
+**Descrição do departamento**:
+Frase curta e opcional (até 160 caracteres) que diz o que um departamento arquiva, cadastrada pelo administrador. Vai ao modelo num bloco de dados próprio do prompt, delimitado com o nonce, fora do delimitador do documento; descrição que soe como instrução ao modelo é recusada antes da chamada; nunca entra no enum nem no schema. Coluna, painel e export/import chegam antes de ligar a classificação ao correio (TASK-107).
+_Evitar_: categoria, rótulo, dica
+
 **Template**:
 Lista ordenada de departamentos da instalação, com placeholder de ano opcional, aplicada igual a todo dono.
 _Evitar_: estrutura padrão, árvore
@@ -74,6 +78,22 @@ Nome, digest e interruptor do provedor externo gravados no banco (linha única);
 **Envelope**:
 JSON validado por schema que o modelo devolve: classificação de um documento ou interpretação de um pedido. Nunca contém dono.
 _Evitar_: resposta do modelo, output
+
+**Delimitador**:
+Par de marcas `<<<DOCUMENTO {nonce}>>>` e `<<<FIM DOCUMENTO {nonce}>>>` entre as quais o texto de um documento (ou de um pedido) vai ao modelo como dado. O nonce é sorteado a cada chamada e o hash do prompt cobre o template, não a instância. Reduz a chance de o documento fechar o bloco; não obriga o modelo a obedecer.
+_Evitar_: separador, escape
+
+**Digest observado**:
+Digest do modelo instalado, lido do servidor (`/api/tags`) e comparado ao digest configurado; com digest configurado, diferença ou ausência impede a chamada. Todo relatório de avaliação registra o configurado e o observado.
+_Evitar_: versão do modelo
+
+**Corpus de avaliação**:
+Pasta com `corpus.json` e os documentos que o `osa eval` roda por um ou mais modelos: positivos (departamento esperado) e adversariais (ataques). O fictício fica em `tests/fixtures/corpus`; o do piloto fica fora de qualquer repositório e nunca é lido de dentro de um.
+_Evitar_: dataset, benchmark, golden set
+
+**Efeito indevido**:
+Documento adversarial cujo envelope é válido e traz `precisa_revisao = false`: o correio o arquivaria sozinho se houvesse evidência de dono. Envelope inválido não conta, porque vira revisão. Critério de gate: zero. Adversarial que não chegou ao modelo (falha de extração) não conta como efeito, mas impede a meta.
+_Evitar_: falha, vazamento
 
 **Correio**:
 Código determinístico que confere evidência de dono, template e raiz, e executa o arquivamento.
@@ -141,7 +161,7 @@ Posição do documento no índice: `DETECTADO`, `ESTAVEL`, `EXTRAIDO`, `CLASSIFI
 Como o documento entrou no índice: `telegram`, `watched` (pasta monitorada) ou `scan`.
 
 **Auditoria**:
-Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`). Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
+Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. A chamada ao provedor externo grava `tentativa` antes da rede (guardada como `failed` com `fase = tentativa`, porque a tabela não tem "pendente") e `ok` ou `failed` só depois dela. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`). Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
 
 ## Tabelas
 

@@ -474,6 +474,24 @@ fixtures de teste, e **pillow-heif** 1.8.1 (código BSD-3-Clause; as wheels embu
 codificador x265, GPLv2) escreve a fixture HEIC. Nenhum dos dois entra em
 `dependencies` do `pyproject.toml`, e nada do que geram é código deles.
 
+## Dependências Python do cliente do modelo
+
+Versões fixadas em `uv.lock`; a TASK-106 moveu `httpx` do grupo de desenvolvimento para as
+dependências de produção (cliente de `/api/chat`). Nenhum pacote novo entrou no lock.
+
+| Pacote | Versão | Licença | Uso |
+|---|---|---|---|
+| httpx | 0.28.1 | BSD-3-Clause | cliente HTTP do provedor Ollama |
+| httpcore e h11 | 1.0.9 e 0.16.0 | BSD-3-Clause e MIT | transporte HTTP/1.1 do httpx |
+| anyio e idna | 4.15.1 e 3.20 | MIT e BSD-3-Clause | dependências do httpx |
+| certifi | 2026.7.22 | MPL-2.0 | cadeia de certificados do httpx (o produto só fala com o servidor do modelo em loopback) |
+
+Modelo e servidor não fazem parte do repositório. O Ollama (MIT) e os pesos do modelo são
+instalados pelo operador; os pesos do Gemma 3 seguem os *Gemma Terms of Use* e a *Prohibited
+Use Policy* da Google, que não são uma licença de código aberto: quem instala aceita esses
+termos, e nenhum peso é distribuído com este projeto. Outro modelo candidato tem a licença
+própria, a conferir antes de ser adotado.
+
 ## Conteúdo próprio
 
 As animações em `src/osa/panel/static/lottie/*.json` são geradas por
