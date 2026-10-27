@@ -153,9 +153,9 @@ def test_rejects_malformed_values() -> None:
         ("ollama_base_url", "https:///path"),
         ("ollama_model", "   "),
         ("ollama_base_url", "http://:11434"),
-        ("ollama_base_url", "http://host.example.test:notaport"),
-        ("ollama_base_url", "http://host.example.test:99999"),
-        ("ollama_base_url", "HTTP://host.example.test"),
+        ("ollama_base_url", "http://127.0.0.1:notaport"),
+        ("ollama_base_url", "http://127.0.0.1:99999"),
+        ("ollama_base_url", "HTTP://127.0.0.1"),
         ("sensitive_extensions", "."),
         ("sensitive_extensions", "pfx/key"),
         ("sensitive_extensions", ".p*x"),
@@ -167,6 +167,51 @@ def test_rejects_empty_or_hollow_values(field: str, value: str) -> None:
         Settings(**{field: value})  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1:11434",
+        "http://127.0.0.1:54321/",
+        "https://127.0.0.1",
+        "http://localhost:11434",
+        "http://LOCALHOST:11434",
+        "http://[::1]:11434",
+    ],
+)
+def test_ollama_url_accepts_loopback_hosts(url: str) -> None:
+    assert Settings(ollama_base_url=url).ollama_base_url == url
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://host.example.test:11434",
+        "http://192.0.2.10:11434",
+        "http://10.0.0.5:11434",
+        "http://0.0.0.0:11434",
+        "http://127.0.0.2:11434",
+        "http://[::ffff:127.0.0.1]:11434",
+        "http://localhost.example.test:11434",
+        "http://localhost.:11434",
+        "http://127.0.0.1.example.test:11434",
+        "http://macmini.local:11434",
+    ],
+)
+def test_ollama_url_refuses_non_loopback_hosts(url: str) -> None:
+    # Document content goes to this URL (ADR-0002): only this machine qualifies.
+    with pytest.raises(ValidationError, match="ollama_base_url") as error:
+        Settings(ollama_base_url=url)
+
+    assert "loopback" in str(error.value)
+
+
+def test_ollama_url_refusal_never_echoes_the_host() -> None:
+    with pytest.raises(ValidationError) as error:
+        Settings(ollama_base_url="http://fictional-remote-host.test:11434")
+
+    assert "fictional-remote-host" not in str(error.value)
+
+
 def test_ollama_model_is_stripped() -> None:
     assert Settings(ollama_model="  gemma3:12b  ").ollama_model == "gemma3:12b"
 
@@ -175,9 +220,10 @@ def test_ollama_model_is_stripped() -> None:
     "url",
     [
         "http://user:fictional-secret@exa\uff0fmple.test",
+        "http://user:fictional-secret@127.0.0.1:11434",
+        "http://fictional-secret@localhost",
+        "http://user:fictional-secret@127.0.0.1:notaport",
         "http://user:fictional-secret@host.example.test:11434",
-        "http://fictional-secret@host.example.test",
-        "http://user:fictional-secret@host.example.test:notaport",
         "http://user:fictional-secret@[::1",
     ],
 )
@@ -482,3 +528,12 @@ def test_multi_host_dsn_is_accepted_and_hidden() -> None:
     for text in (repr(settings), str(settings), settings.model_dump_json()):
         assert "fictional-first" not in text
         assert "fictional-second" not in text
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://127.0.0.1:11434/?x=1", "http://127.0.0.1:11434#frag", "http://127.0.0.1:11434/?"],
+)
+def test_ollama_base_url_refuses_query_and_fragment(url: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, ollama_base_url=url)

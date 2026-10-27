@@ -200,7 +200,11 @@ paralelo, e como reproduzir cada um localmente:
 | `tests-integration` | Suite de integração contra PostgreSQL 17 descartável, com papel sem SUPERUSER (só CREATEDB) e banco `osa_test` | `OSA_TEST_DATABASE_URL=postgresql://<papel>:<senha>@127.0.0.1:5432/osa_test uv run pytest -m integration -q` |
 
 As suites `native` (share SMB de teste) e `live` (Ollama) **não** rodam no CI:
-dependem de ambiente real e cada skip fica no registro da task. A suite de
+dependem de ambiente real e cada skip fica no registro da task. A `live` roda com
+`OSA_TEST_OLLAMA_URL` (só loopback; o túnel SSH para o Mac mini serve), `OSA_TEST_OLLAMA_MODEL`
+e, de preferência, `OSA_TEST_OLLAMA_DIGEST` e `OSA_TEST_OLLAMA_REPORT_DIR` (onde guardar os
+relatórios): `uv run pytest -m live -q`. A mesma avaliação, à mão e com vários modelos:
+`uv run osa eval --corpus tests/fixtures/corpus --model A --digest X --model B --digest Y`. A suite de
 integração precisa de um PostgreSQL descartável cujo papel tenha `CREATEDB`
 (ela cria e apaga bancos `osa_test_mig_*`) e aplica `alembic upgrade head`
 sozinha. O CI não usa segredos: as credenciais do container são fictícias e

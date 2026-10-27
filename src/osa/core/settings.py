@@ -31,6 +31,28 @@ ENV_PREFIX = "OSA_"
 
 _EXTENSION = re.compile(r"^\.[a-z0-9]+$")
 
+# Document content goes to the model server (ADR-0002, ADR-0012): only this machine qualifies.
+LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def is_loopback_url(url: str) -> bool:
+    """True for an http(s) URL on 127.0.0.1, ::1 or localhost, without userinfo, query or fragment.
+
+    The model provider re-checks every request with this, so scheme and userinfo are checked
+    here too, not only in ``Settings``.
+    """
+    if "?" in url or "#" in url:
+        return False
+    try:
+        parts = urlsplit(url)
+        hostname = parts.hostname
+        _ = parts.port
+    except ValueError:
+        return False
+    if parts.scheme not in ("http", "https") or "@" in parts.netloc:
+        return False
+    return hostname in LOOPBACK_HOSTS
+
 
 def _sanitized_errors(error: ValidationError) -> list[InitErrorDetails]:
     """Re-raisable error details without input, ctx, or URL passwords in msg."""
@@ -222,6 +244,13 @@ class Settings(BaseSettings):
             raise ValueError("ollama_base_url must not contain credentials")
         if not hostname:
             raise ValueError("ollama_base_url must include a host")
+        if "?" in value or "#" in value:
+            raise ValueError("ollama_base_url must not contain a query or a fragment")
+        if hostname not in LOOPBACK_HOSTS:
+            raise ValueError(
+                "ollama_base_url must point to this machine (loopback: 127.0.0.1, ::1 or "
+                "localhost): document content never leaves it"
+            )
         return value
 
     @field_validator("quarantine_dir")

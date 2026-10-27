@@ -200,5 +200,81 @@ def panel_command(
         _fail(str(error))
 
 
+def _default_model(settings: Any) -> tuple[str, str | None]:
+    """The effective model: the registry row when a database is configured, else the env."""
+    if settings.database_url is None:
+        return settings.ollama_model, settings.ollama_model_digest
+    from osa.admin import services
+
+    config = _in_transaction(lambda session: services.effective_model_config(session, settings))
+    return config.nome, config.digest
+
+
+@app.command("eval")
+def eval_command(
+    corpus: Path = typer.Option(..., "--corpus", help="Corpus directory (corpus.json inside)."),
+    out: Path | None = typer.Option(
+        None, "--out", help="Write reports here (new folder, mode 0600); default: stdout only."
+    ),
+    model: list[str] | None = typer.Option(
+        None, "--model", help="Model to evaluate; repeat to compare. Default: the configured one."
+    ),
+    digest: list[str] | None = typer.Option(
+        None, "--digest", help="Digest of the Nth --model (same order)."
+    ),
+    meta: float = typer.Option(0.90, "--meta", min=0.0, max=1.0, help="Department accuracy goal."),
+) -> None:
+    """Evaluate the model(s) on a corpus: accuracy, review rate, latency, improper effects.
+
+    Exit 0: every model met the goal. 2: one missed it. 1: corpus refused or a model could
+    not be evaluated. Nothing is saved to the registry.
+    """
+    from osa.core.logging import configure_logging
+    from osa.domain.errors import DomainError
+    from osa.extract.model import ExtractLimits
+    from osa.llm import eval as harness
+    from osa.llm.ollama import literal_loopback_url
+
+    configure_logging("WARNING")  # stdout is the report: only warnings, as JSON on stderr
+    settings = _settings()
+    try:
+        loaded = harness.load_corpus(corpus, sensitive_extensions=settings.sensitive_extensions)
+        if not loaded.ficticio and out is None:
+            raise ValueError("corpus real exige --out, fora de qualquer repositório")
+        specs = harness.pair_models(
+            model, digest, ("", None) if model else _default_model(settings)
+        )
+        # Before the first byte: where the documents are going (the default URL can be a tunnel).
+        target_url = literal_loopback_url(settings.ollama_base_url)
+        for name, pinned in specs:
+            typer.echo(
+                f"avaliando {name} (digest {pinned or 'não fixado'}) em {target_url}: "
+                f"{len(loaded.entries)} documentos",
+                err=True,
+            )
+        comparison = harness.run_comparison(
+            loaded,
+            specs,
+            meta=meta,
+            make_target=lambda name, pinned: harness.make_target(settings, name, pinned),
+            limits=ExtractLimits.from_settings(settings),
+            extractor=harness.extract_document,
+        )
+        folder = harness.write_reports(comparison, out) if out is not None else None
+    except (DomainError, ValueError) as error:
+        _fail(str(error))
+    for report in comparison.reports:
+        if report.error:
+            typer.echo(f"erro: {report.model}: {report.error}", err=True)
+    if any(report.results for report in comparison.reports):
+        for report in comparison.reports:
+            typer.echo(report.to_markdown())
+        if len(comparison.reports) > 1:
+            typer.echo(comparison.to_markdown())
+    if folder is not None:
+        typer.echo(f"relatórios em {folder}")
+    raise typer.Exit(comparison.exit_code)
+
+
 def main() -> None:
     app()
