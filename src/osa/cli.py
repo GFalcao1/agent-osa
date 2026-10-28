@@ -368,6 +368,8 @@ def process_command(
                 )
     except (DatabaseNotConfigured, DomainError, ValueError) as error:
         _fail(str(error))
+    except OSError:
+        _fail("arquivo não existe ou não pode ser lido")
     except OperationalError:
         _fail("banco de dados inacessível: confira OSA_DATABASE_URL e se o PostgreSQL está de pé")
     except SQLAlchemyError:

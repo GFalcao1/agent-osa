@@ -14,9 +14,10 @@ from pathlib import Path
 from osa.courier.ports import FsPort
 from osa.courier.store import Store
 from osa.db.audit import RESULT_FAILED, RESULT_OK, RESULT_SIMULATED
-from osa.db.models import ArchiveOperation
+from osa.db.models import ArchiveOperation, Document
 from osa.domain.document import ArchiveMode, DocumentState
 from osa.domain.errors import Conflict, DomainError
+from osa.fs.errors import IdentityChanged
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +65,11 @@ def undo_operation(
             effects_enabled=effects_enabled,
         )
     except DomainError as error:
+        destino = error.destino if isinstance(error, IdentityChanged) else None
+        if destino is not None:
+            # The rename back happened and the check came after it: record where the file
+            # is, so the index never lies, and keep the failure visible to the caller.
+            _back_at_origin(store, document, operation, destino, actor, changed=True)
         store.audit(
             ator=actor,
             acao="archive.undo",
@@ -71,7 +77,7 @@ def undo_operation(
             alvo_id=document.id,
             sha256=operation.sha256,
             resultado=RESULT_FAILED,
-            detalhes={"operation_id": operation.id, "erro": str(error)},
+            detalhes={"operation_id": operation.id, "erro": str(error), "destino": destino},
         )
         store.commit()
         raise
@@ -87,21 +93,7 @@ def undo_operation(
         )
         store.commit()
         return UndoResult(operation.id, None, document.id, result.dest_rel, True)
-    reverse = store.add_operation(
-        ArchiveOperation(
-            document_id=document.id,
-            root_id=operation.root_id,
-            origem=result.source_rel,
-            destino=result.dest_rel,
-            sha256=operation.sha256,
-            ator=actor,
-            modo=ArchiveMode.UNDO.value,
-        )
-    )
-    document.caminho = result.dest_rel
-    document.estado = DocumentState.NA_ORIGEM.value
-    document.motivo = f"desfeito: operação {operation.id}"
-    store.save()
+    reverse = _back_at_origin(store, document, operation, result.dest_rel, actor)
     store.audit(
         ator=actor,
         acao="archive.undo",
@@ -117,3 +109,38 @@ def undo_operation(
     )
     store.commit()
     return UndoResult(operation.id, reverse.id, document.id, result.dest_rel, False)
+
+
+def _back_at_origin(
+    store: Store,
+    document: Document,
+    operation: ArchiveOperation,
+    destino: str,
+    actor: str,
+    *,
+    changed: bool = False,
+) -> ArchiveOperation:
+    """Record the inverse rename and put the row back at the origin, without a destination."""
+    reverse = store.add_operation(
+        ArchiveOperation(
+            document_id=document.id,
+            root_id=operation.root_id,
+            origem=operation.destino,
+            destino=destino,
+            sha256=operation.sha256,
+            ator=actor,
+            modo=ArchiveMode.UNDO.value,
+        )
+    )
+    document.caminho = destino
+    document.estado = DocumentState.NA_ORIGEM.value
+    document.motivo = (
+        f"desfeito com identidade alterada: operação {operation.id}"
+        if changed
+        else f"desfeito: operação {operation.id}"
+    )
+    document.owner_id = None
+    document.departamento_id = None
+    document.ano = None
+    store.save()
+    return reverse

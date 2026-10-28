@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from osa.admin import services
 from osa.courier.decision import TemplateDepartment
 from osa.courier.ports import FsPort
-from osa.db.audit import RESULT_DENIED, RESULT_OK, record_event
+from osa.db.audit import RESULT_DENIED, RESULT_OK, RESULT_SIMULATED, record_event
 from osa.db.models import Department, Owner, OwnerAlias, Root, User
 from osa.domain.errors import AccessDenied, Conflict, NotFound
 from osa.domain.owner import is_valid_cnpj, normalize_alias, normalize_cnpj
@@ -103,15 +103,27 @@ def confirm_owner_request(
     actor: str,
     aliases: Sequence[str] = (),
 ) -> Owner:
-    """Create the owner and its template tree in the upload root; the caller commits.
+    """Create the owner, commit, then create its template tree in the upload root.
 
-    Refused without an active administrator (``AccessDenied``) and for a name that already
-    resolves to an owner (``Conflict``). With effects off the tree is only predicted.
+    Two commits, in this order, so a folder is never created for an owner the registry does
+    not have (SPEC §10): the owner and the confirmation event first, the tree and its event
+    after. Refused without an active administrator (``AccessDenied``) and for a name that
+    already resolves to an owner (``Conflict``). With effects off the tree is only predicted.
     """
     admin = _active_admin(session, admin_id)
     if resolve_declared_owner(session, request.nome) is not None:
         raise Conflict("dono já cadastrado")
     owner = services.create_owner(session, nome_fantasia=request.nome, aliases=aliases, actor=actor)
+    record_event(
+        session,
+        ator=actor,
+        acao="owner.request.confirm",
+        alvo_tipo="owner",
+        alvo_id=owner.id,
+        resultado=RESULT_OK,
+        detalhes={"solicitante": request.requested_by, "administrador": admin.id},
+    )
+    session.commit()
     root = upload_root(session, owner, fs=fs)
     tree = fs.ensure_owner_tree(
         Path(root.caminho),
@@ -123,17 +135,13 @@ def confirm_owner_request(
     record_event(
         session,
         ator=actor,
-        acao="owner.request.confirm",
+        acao="owner.tree",
         alvo_tipo="owner",
         alvo_id=owner.id,
-        resultado=RESULT_OK if not tree.simulated else "simulated",
-        detalhes={
-            "solicitante": request.requested_by,
-            "administrador": admin.id,
-            "root_id": root.id,
-            "pastas_criadas": len(tree.created),
-        },
+        resultado=RESULT_SIMULATED if tree.simulated else RESULT_OK,
+        detalhes={"root_id": root.id, "pastas_criadas": len(tree.created)},
     )
+    session.commit()
     return owner
 
 

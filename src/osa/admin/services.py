@@ -33,7 +33,8 @@ from osa.db.models import (
 from osa.domain.errors import AccessDenied, Conflict, NotFound, UnsafePath
 from osa.domain.owner import normalize_alias, normalize_cnpj
 from osa.domain.user import Role
-from osa.llm.envelopes import MAX_DESCRIPTION_LEN
+from osa.llm.envelopes import MAX_DESCRIPTION_LEN, validate_departments
+from osa.llm.provider import InvalidDepartments
 
 # --- folder names -------------------------------------------------------------------
 
@@ -560,10 +561,26 @@ def set_watched_folder_active(
 # --- departments (template) ---------------------------------------------------------
 
 
+def department_name(nome: str, others: Iterable[str] = ()) -> str:
+    """The NFC name, usable as the model's enum value and distinct from ``others``.
+
+    The same rule the prompt applies (``validate_departments``): letters or digits, at most
+    100 characters, no control characters, and unique ignoring case, accents and signs. The
+    registry refuses here what the classification would refuse for every document.
+    """
+    text = _nfc(_text(nome, "nome"))
+    try:
+        validate_departments([*others, text])
+    except InvalidDepartments:
+        raise ValueError("nome de departamento repetido ou inválido para o modelo") from None
+    return text
+
+
 def _department_collision(
     session: Session, nome: str, pasta: str, *, exclude_id: int | None = None
 ) -> None:
     name_key, folder = folder_key(nome), folder_key(pasta)
+    others: list[str] = []
     for other in session.scalars(select(Department)):
         if other.id == exclude_id:
             continue
@@ -571,6 +588,8 @@ def _department_collision(
             raise Conflict("já existe departamento com este nome")
         if folder_key(other.pasta) == folder:
             raise Conflict("pasta já em uso por outro departamento")
+        others.append(other.nome)
+    department_name(nome, others)
 
 
 def department_description(value: str | None) -> str | None:
@@ -604,7 +623,7 @@ def create_department(
     descricao: str | None = None,
     actor: str,
 ) -> Department:
-    nome = _text(nome, "nome")
+    nome = department_name(nome)
     description = department_description(descricao)
     folder = validate_folder_name(pasta) if pasta and pasta.strip() else derive_folder_name(nome)
     _lock(session, _FOLDER_LOCK)
@@ -633,7 +652,7 @@ def update_department(
     actor: str,
 ) -> Change[Department]:
     department = _fetch(session, Department, department_id, "departamento")
-    nome = _text(nome, "nome")
+    nome = department_name(nome)
     description = department_description(descricao)
     folder = validate_folder_name(pasta)
     _lock(session, _FOLDER_LOCK)

@@ -31,6 +31,7 @@ from osa.courier.decision import (
 from osa.courier.evidence import OwnerCandidate
 from osa.courier.intake import Intake
 from osa.courier.pipeline import (
+    MOTIVO_LIVRE,
     Archived,
     ConfigurationError,
     Duplicate,
@@ -301,11 +302,13 @@ class FakeContent:
         text: str = TEXT,
         classes: dict[str, FileClass] | None = None,
         extract_error: Exception | None = None,
+        sniff_error: Exception | None = None,
     ) -> None:
         self.fs = fs
         self.text = text
         self.classes = classes or {}
         self.extract_error = extract_error
+        self.sniff_error = sniff_error
         self.external: dict[Path, bytes] = {}
         self.reads: list[Path] = []
 
@@ -313,6 +316,8 @@ class FakeContent:
         return class_by_name(name, DEFAULT_SENSITIVE_EXTENSIONS)
 
     def file_class(self, path: Path) -> FileClass:
+        if self.sniff_error is not None:
+            raise self.sniff_error
         return self.classes.get(path.name, self.class_by_name(path.name))
 
     def _bytes(self, path: Path) -> bytes:
@@ -764,6 +769,91 @@ def test_sensitive_file_is_refused_by_name_before_any_read() -> None:
     assert event["detalhes"]["motivo"] == "classe sensível: nunca lida"
 
 
+def test_sensitive_name_on_disk_is_refused_even_with_a_harmless_original_name() -> None:
+    sc = scenario(relative="entrada/chave.pem", name="nota.pdf")
+    with pytest.raises(SensitiveFile):
+        sc.run()
+    assert sc.store.documents == {} and sc.content.reads == []
+
+
+def test_sensitive_class_found_after_the_hash_leaves_the_file_at_the_origin() -> None:
+    sc = scenario()
+    sc.content.extract_error = SensitiveFile("arquivo de classe sensível")
+    outcome = sc.run()
+    assert isinstance(outcome, NotSupported) and outcome.estado == "NA_ORIGEM"
+    assert sc.document.texto is None and sc.llm.calls == []
+    assert sc.store.committed[-1]["acao"] == "document.intake"
+    sc2 = scenario()
+    sc2.content.classes[STAGED.rsplit("/", 1)[1]] = FileClass.SENSITIVE
+    assert sc2.run().estado == "NA_ORIGEM"
+
+
+def test_unreadable_or_oversized_file_is_falhou_with_the_sniff_reason() -> None:
+    sc = scenario()
+    sc.content.sniff_error = ExtractionFailed("arquivo grande demais")
+    outcome = sc.run()
+    assert outcome == Failed(1, "FALHOU", "extração falhou: arquivo grande demais")
+    assert sc.llm.calls == []
+
+
+def test_identity_changed_after_the_rename_records_the_move_that_happened() -> None:
+    sc = scenario()
+    sc.fs.archive_error = IdentityChanged("a origem foi trocada", destino=DEST)
+    assert isinstance(sc.run(), Failed)
+    [operation] = sc.store.operations
+    assert (operation.origem, operation.destino, operation.modo) == (STAGED, DEST, "auto")
+    sc2 = scenario()
+    sc2.fs.archive_error = IdentityChanged("a origem mudou enquanto era conferida")
+    assert isinstance(sc2.run(), Failed)
+    assert sc2.store.operations == [] and sc2.document.caminho == STAGED
+
+
+def test_reprocessing_starts_from_a_clean_row() -> None:
+    sc = scenario()
+    sc.fs.archive_error = IdentityChanged("trocado", destino=DEST)
+    failed = sc.run()
+    assert isinstance(failed, Failed) and sc.document.owner_id == 1
+    sc.fs.archive_error = None
+    sc.fs.files[STAGED] = PDF  # the file is back at the origin (say, moved by hand)
+    sc.content.extract_error = Unsupported("formato não suportado")
+    outcome = sc.run()
+    assert isinstance(outcome, NotSupported)
+    document = sc.document
+    assert (document.owner_id, document.departamento_id, document.ano) == (None, None, None)
+    assert (document.tipo_documental, document.tags, document.texto) == (None, [], None)
+
+
+def test_the_model_free_reason_is_only_flagged_in_the_audit() -> None:
+    sc = scenario(env=envelope(revisao=True, motivo="Fala do CNPJ 12.345.678/0001-95 do cliente"))
+    outcome = sc.run()
+    assert isinstance(outcome, Reviewed)
+    assert outcome.motivo.startswith("Fala do CNPJ")  # the case keeps the model's words
+    assert sc.store.reviews[0].motivo == outcome.motivo
+    assert "12.345.678" not in sc.audit_json()
+    classify = next(e for e in sc.store.committed if e["acao"] == "document.classify")
+    review = next(e for e in sc.store.committed if e["acao"] == "document.review")
+    assert classify["detalhes"]["motivo_revisao"] == MOTIVO_LIVRE
+    assert review["detalhes"]["motivo"] == MOTIVO_LIVRE
+
+
+def test_known_reasons_are_audited_verbatim() -> None:
+    sc = scenario(env=envelope(revisao=True, motivo="texto_insuficiente"))
+    sc.run()
+    classify = next(e for e in sc.store.committed if e["acao"] == "document.classify")
+    assert classify["detalhes"]["motivo_revisao"] == "texto_insuficiente"
+
+
+def test_owner_contradiction_joins_another_reason_instead_of_being_dropped() -> None:
+    sc = scenario(
+        declared=1, text=f"Holerite de Beta Serviços, CNPJ {CNPJ_BETA}", env=envelope(ano=None)
+    )
+    outcome = sc.run()
+    assert isinstance(outcome, Reviewed)
+    assert outcome.motivo == f"{MOTIVO_ANO_AUSENTE}; {MOTIVO_DONO_DIVERGENTE}"
+    review = next(e for e in sc.store.committed if e["acao"] == "document.review")
+    assert review["detalhes"]["motivo"] == outcome.motivo  # both are known codes
+
+
 # --- efeitos desligados ---------------------------------------------------------------------
 
 
@@ -860,6 +950,36 @@ def test_undo_refuses_a_file_whose_content_changed() -> None:
         _undo(sc, 1)
     assert sc.document.estado == "ARQUIVADO" and DEST in sc.fs.files
     assert sc.store.committed[-1]["resultado"] == "failed"
+
+
+def test_undo_clears_the_destination_fields_of_the_row() -> None:
+    sc = scenario()
+    sc.run()
+    _undo(sc, 1)
+    document = sc.document
+    assert (document.owner_id, document.departamento_id, document.ano) == (None, None, None)
+    assert document.tipo_documental == "nota fiscal de serviço"  # the classification stays
+
+
+def test_undo_identity_changed_after_the_rename_back_is_recorded() -> None:
+    sc = scenario()
+    sc.run()
+    original = sc.fs.undo
+
+    def swapped_after_rename(*args: Any, **kwargs: Any) -> Any:
+        result = original(*args, **kwargs)
+        raise IdentityChanged("trocado depois do rename", destino=result.dest_rel)
+
+    sc.fs.undo = swapped_after_rename  # type: ignore[method-assign]
+    with pytest.raises(IdentityChanged):
+        _undo(sc, 1)
+    reverse = sc.store.operations[1]
+    assert (reverse.modo, reverse.origem, reverse.destino) == ("undo", DEST, STAGED)
+    assert (sc.document.estado, sc.document.caminho) == ("NA_ORIGEM", STAGED)
+    assert sc.document.motivo == "desfeito com identidade alterada: operação 1"
+    assert sc.store.committed[-1]["resultado"] == "failed"
+    with pytest.raises(Conflict, match="já desfeito"):
+        _undo(sc, 1)
 
 
 def test_undo_simulated_moves_nothing() -> None:

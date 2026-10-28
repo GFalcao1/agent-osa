@@ -194,6 +194,33 @@ def _process(
 DEST = "Alfa Comércio/01 Fiscal/2026/nota.pdf"
 
 
+# --- quarentena -------------------------------------------------------------------------------
+
+
+def test_stage_upload_simulates_on_a_root_without_quarantine(installation: Installation) -> None:
+    inst = installation
+    staged = stage_upload(
+        inst.root,
+        PDF,
+        "nota.pdf",
+        sensitive_extensions=DEFAULT_SENSITIVE_EXTENSIONS,
+        effects_enabled=False,
+    )
+    assert staged.simulated and staged.relative_path.startswith(f"{QUARANTINE_DIR}/")
+    assert staged.relative_path.endswith(".pdf") and not (inst.root / QUARANTINE_DIR).exists()
+    real = _stage(inst)
+    assert (inst.root / QUARANTINE_DIR).is_dir()
+    predicted = stage_upload(
+        inst.root,
+        PDF,
+        "nota.pdf",
+        sensitive_extensions=DEFAULT_SENSITIVE_EXTENSIONS,
+        effects_enabled=False,
+    )
+    assert predicted.simulated and not (inst.root / predicted.relative_path).exists()
+    assert [p.name for p in (inst.root / QUARANTINE_DIR).iterdir()] == [real.rsplit("/", 1)[1]]
+
+
 # --- fluxo A ------------------------------------------------------------------------------
 
 
@@ -389,9 +416,11 @@ def test_new_owner_needs_an_administrator_and_gets_the_template_tree(
     assert owners.resolve_declared_owner(inst.session, "gama industria") == owner
     assert (inst.root / "Gama Indústria" / "01 Fiscal").is_dir()
     assert (inst.root / "Gama Indústria" / "02 Pessoal").is_dir()
-    [event] = inst.events("owner.request.confirm")
-    assert event.detalhes["solicitante"] == inst.operator_id
-    assert event.detalhes["pastas_criadas"] == 3
+    [confirmed] = inst.events("owner.request.confirm")
+    assert confirmed.detalhes == {"solicitante": inst.operator_id, "administrador": inst.admin_id}
+    [tree] = inst.events("owner.tree")
+    assert tree.detalhes == {"root_id": inst.root_id, "pastas_criadas": 3}
+    assert confirmed.id < tree.id
     with pytest.raises(Conflict, match="já cadastrado"):
         owners.confirm_owner_request(
             inst.session, request, admin_id=inst.admin_id, fs=LocalFs(), effects_enabled=True,

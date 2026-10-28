@@ -8,6 +8,7 @@ of the sensitive class is refused by name, before a byte is written.
 from __future__ import annotations
 
 import os
+import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from pathlib import Path
 from osa.domain.document import FileClass, Origin
 from osa.domain.errors import SensitiveFile
 from osa.extract.classify import class_by_name, normalized_extension
+from osa.fs.names import QUARANTINE_DIR
 
 _QUARANTINE_SUFFIX_OK = frozenset("abcdefghijklmnopqrstuvwxyz0123456789")
 
@@ -28,7 +30,8 @@ class Intake:
     is ``None`` only for a simulated run on a file outside the root (``osa process`` with
     effects off). ``original_name`` is the name the file is archived under; the quarantine
     name is an id. ``declared_owner`` is an ``owners.id`` resolved by code from what the
-    operator wrote (``osa.courier.owners``), never by the model.
+    operator wrote (``osa.courier.owners``), never by the model. ``sender`` is a ``users.id``
+    (the row of the allowlist), never a Telegram id.
     """
 
     root_id: int
@@ -76,10 +79,18 @@ def stage_upload(
         )
     from osa.fs.quarantine import ensure_quarantine, new_quarantine_file
 
-    ensure_quarantine(root, effects_enabled=effects_enabled)
-    with new_quarantine_file(
-        root, suffix=quarantine_suffix(original_name), effects_enabled=effects_enabled
-    ) as file:
+    folder = ensure_quarantine(root, effects_enabled=effects_enabled)
+    suffix = quarantine_suffix(original_name)
+    if folder.simulated and folder.created:
+        # Effects off on a root without a quarantine yet: the folder is only predicted, so
+        # the file name is predicted too (the real run creates both).
+        return StagedUpload(
+            relative_path=f"{QUARANTINE_DIR}/{uuid.uuid4().hex}{suffix}",
+            path=root / QUARANTINE_DIR / "(simulado)",
+            size=len(data),
+            simulated=True,
+        )
+    with new_quarantine_file(root, suffix=suffix, effects_enabled=effects_enabled) as file:
         if file.fd is not None:
             view = memoryview(data)
             while view:

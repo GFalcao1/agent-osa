@@ -383,6 +383,13 @@ def _refusals(tmp_path: Path) -> dict[str, Callable[[], object]]:
             nome="a" * 201,
             actor="test",
         ),
+        "nome de departamento repetido ou inválido para o modelo": lambda: (
+            services.create_department(
+                None,  # type: ignore[arg-type]
+                nome="---",
+                actor="test",
+            )
+        ),
         "descrição do departamento inválido": lambda: services.create_department(
             None,  # type: ignore[arg-type]
             nome="Fiscal",

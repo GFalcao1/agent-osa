@@ -548,6 +548,30 @@ def test_department_description_is_stored_validated_and_audited(session: Session
     assert [d.nome for d in session.scalars(select(Department))] == ["Fiscal"]
 
 
+def test_department_name_is_stored_in_nfc_and_unique_the_way_the_prompt_compares(
+    session: Session,
+) -> None:
+    decomposed = "Conta\u0301bil"  # NFD: the prompt's enum would never equal this spelling
+    department = services.create_department(session, nome=decomposed, actor=ACTOR)
+    assert department.nome == "Contábil"
+
+    for clash in ("Contabil", "CONTÁBIL!", "---", "x" * 101):
+        with pytest.raises((ValueError, Conflict), match="departamento"):
+            services.create_department(session, nome=clash, pasta="Outra", actor=ACTOR)
+    assert [d.nome for d in session.scalars(select(Department))] == ["Contábil"]
+
+    services.create_department(session, nome="Fiscal", actor=ACTOR)
+    with pytest.raises(ValueError, match="repetido ou inválido para o modelo"):
+        services.update_department(
+            session,
+            department.id,
+            nome="Físcal",
+            pasta=department.pasta,
+            usa_ano=False,
+            actor=ACTOR,
+        )
+
+
 def test_create_root_refuses_what_the_archiving_layer_would_refuse(session: Session) -> None:
     """The registry opens the root as ``open_root`` does, so ``/`` never gets registered."""
     with pytest.raises(UnsafePath, match="raiz do sistema"):

@@ -260,6 +260,13 @@ PROBLEMS: Final[dict[str, tuple[Problem, ...]]] = {
             "Use um nome mais curto.",
         ),
         Problem(
+            "nome de departamento repetido ou inválido para o modelo",
+            "O nome tem mais de 100 letras, não tem letra nem número, ou fica igual ao de "
+            "outro departamento quando se ignoram acentos, maiúsculas e sinais (Fiscal e "
+            "Físcal contam como o mesmo nome para o programa que classifica).",
+            "Use outro nome, com letras e até 100 letras, que não se confunda com os demais.",
+        ),
+        Problem(
             "descrição do departamento inválido",
             "A descrição passou de 160 letras.",
             "Encurte a descrição. Uma frase basta.",

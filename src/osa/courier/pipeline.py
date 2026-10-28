@@ -18,7 +18,9 @@ from typing import Any, Final
 
 from osa.core.logging import get_logger, log_context
 from osa.courier.decision import (
+    MOTIVO_ANO_AUSENTE,
     MOTIVO_ARQUIVAMENTO_RECUSADO,
+    MOTIVO_DEPARTAMENTO_INVALIDO,
     MOTIVO_DONO_AMBIGUO,
     MOTIVO_DONO_DIVERGENTE,
     MOTIVO_ENVELOPE_INVALIDO,
@@ -51,14 +53,44 @@ from osa.domain.errors import (
 from osa.extract.model import ExtractedContent
 from osa.fs.errors import IdentityChanged
 from osa.fs.names import nfc
-from osa.llm.envelopes import ClassificationEnvelope
+from osa.llm.envelopes import (
+    FALLBACK_REASON,
+    MOTIVO_DEPARTAMENTOS_AMBIGUOS,
+    ClassificationEnvelope,
+)
 from osa.llm.envelopes import Department as DepartmentSpec
+from osa.llm.prompts import MOTIVO_INSTRUCAO_EMBUTIDA, MOTIVO_TEXTO_INSUFICIENTE
 from osa.llm.provider import EnvelopeInvalid, InvalidDepartments, LLMError
 
 log = get_logger("osa.courier")
 
 ALVO: Final = "document"
 MOTIVO_SENSIVEL: Final = "classe sensível: nunca lida"
+MOTIVO_LIVRE: Final = "motivo_livre"
+#: Reasons the audit may quote verbatim; anything else is model text and is only flagged.
+KNOWN_REASONS: Final = frozenset(
+    {
+        FALLBACK_REASON,
+        MOTIVO_DEPARTAMENTOS_AMBIGUOS,
+        MOTIVO_INSTRUCAO_EMBUTIDA,
+        MOTIVO_TEXTO_INSUFICIENTE,
+        MOTIVO_ARQUIVAMENTO_RECUSADO,
+        MOTIVO_DONO_AMBIGUO,
+        MOTIVO_DONO_DIVERGENTE,
+        MOTIVO_ENVELOPE_INVALIDO,
+        MOTIVO_SEM_DONO,
+        MOTIVO_ANO_AUSENTE,
+        MOTIVO_DEPARTAMENTO_INVALIDO,
+    }
+)
+
+
+def audit_reason(motivo: str | None) -> str | None:
+    """The reason as the audit may store it: known codes kept, free model text flagged."""
+    if motivo is None:
+        return None
+    parts = [part if part in KNOWN_REASONS else MOTIVO_LIVRE for part in motivo.split("; ")]
+    return "; ".join(parts)
 
 
 class ConfigurationError(DomainError):
@@ -164,6 +196,13 @@ class _Run:
         self.store.commit()
         return NotSupported(self.document.id, self.document.estado, motivo)
 
+    def left_at_origin(self, motivo: str) -> NotSupported:
+        """A file the courier refuses to read: it stays where it is, ``NA_ORIGEM``."""
+        self.move_to(DocumentState.NA_ORIGEM, motivo)
+        self.audit("document.intake", RESULT_DENIED, motivo=motivo)
+        self.store.commit()
+        return NotSupported(self.document.id, self.document.estado, motivo)
+
     def review(
         self, motivo: str, department: TemplateDepartment | None, **detalhes: Any
     ) -> Reviewed:
@@ -178,7 +217,7 @@ class _Run:
         self.audit(
             "document.review",
             RESULT_OK,
-            motivo=motivo,
+            motivo=audit_reason(motivo),
             case_id=case.id,
             departamento_sugerido_id=case.departamento_sugerido_id,
             **detalhes,
@@ -190,7 +229,21 @@ class _Run:
 
 
 def _template(departments: Sequence[Department]) -> list[TemplateDepartment]:
-    return [TemplateDepartment(d.id, d.nome, d.pasta, d.usa_ano) for d in departments]
+    # Names in NFC, as the enum of the envelope spells them (``validate_departments``).
+    return [TemplateDepartment(d.id, nfc(d.nome), d.pasta, d.usa_ano) for d in departments]
+
+
+def _is_sensitive(content: ContentPort, intake: Intake) -> bool:
+    """By the original name **and** by the name on disk: neither is trusted alone."""
+    on_disk = (
+        intake.relative_path.rsplit("/", 1)[-1]
+        if intake.relative_path is not None
+        else intake.source.name
+    )
+    return any(
+        content.class_by_name(name) is FileClass.SENSITIVE
+        for name in (intake.original_name, on_disk)
+    )
 
 
 def process(
@@ -223,7 +276,7 @@ def process(
         raise UnsafePath(
             "com efeitos ligados o arquivo precisa estar na raiz (quarentena ou pasta monitorada)"
         )
-    if content.class_by_name(intake.original_name) is FileClass.SENSITIVE:
+    if _is_sensitive(content, intake):
         store.audit(
             ator=actor,
             acao="document.intake",
@@ -259,13 +312,16 @@ def process(
         store.commit()
         return Duplicate(existing.id, existing.estado, existing.caminho)
 
-    document = existing if existing is not None else Document(sha256=sha256, tags=[], datas=[])
+    document = existing if existing is not None else Document(sha256=sha256)
     document.root_id = root.id
     document.caminho = intake.relative_path
     document.origem = intake.origin.value
     document.enviado_por = intake.sender
     document.estado = DocumentState.DETECTADO.value
     document.motivo = None
+    # A reprocessed row starts clean: nothing of the previous run survives detection.
+    _clear_classification(document)
+    _clear_destination(document)
     if existing is None:
         store.add_document(document)
     else:
@@ -282,6 +338,21 @@ def process(
     store.commit()
     with log_context(document_id=str(document.id)):
         return _after_detection(run)
+
+
+def _clear_classification(document: Document) -> None:
+    document.tipo_documental = None
+    document.tags = []
+    document.resumo = None
+    document.datas = []
+    document.texto = None
+
+
+def _clear_destination(document: Document) -> None:
+    """Owner, department and year stay null until an archiving (model docstring)."""
+    document.owner_id = None
+    document.departamento_id = None
+    document.ano = None
 
 
 def _after_detection(run: _Run) -> Outcome:
@@ -302,10 +373,15 @@ def _steps(run: _Run) -> Outcome:
     document = run.document
 
     # 4. class by content, then extraction (SPEC §7)
-    if content.file_class(run.path) is FileClass.UNSUPPORTED:
-        return run.unsupported("formato não suportado ou conteúdo diferente da extensão")
     try:
+        cls = content.file_class(run.path)
+        if cls is FileClass.SENSITIVE:
+            return run.left_at_origin(MOTIVO_SENSIVEL)
+        if cls is FileClass.UNSUPPORTED:
+            return run.unsupported("formato não suportado ou conteúdo diferente da extensão")
         extracted = content.extract(run.path)
+    except SensitiveFile:
+        return run.left_at_origin(MOTIVO_SENSIVEL)
     except Unsupported as error:
         return run.unsupported(str(error))
     except ExtractionFailed as error:
@@ -344,7 +420,7 @@ def _steps(run: _Run) -> Outcome:
         departamento=envelope.departamento,
         departamento_alternativo=envelope.departamento_alternativo,
         precisa_revisao=envelope.precisa_revisao,
-        motivo_revisao=envelope.motivo_revisao,
+        motivo_revisao=audit_reason(envelope.motivo_revisao),
         ano_referencia=envelope.ano_referencia,
     )
     store.commit()
@@ -354,12 +430,12 @@ def _steps(run: _Run) -> Outcome:
     evidence, reserva = _owner_evidence(run, extracted)
     decision = decide(evidence, envelope, template)
     if reserva is not None:
-        # An ambiguous or contradicted owner is a reason of its own; only the model's own
-        # reservation and a department outside the template say more than it.
-        if isinstance(decision, AutoArchive):
+        # An ambiguous or contradicted owner is a reason of its own: it replaces "no
+        # evidence" and joins any other reason, so the reviewer sees both.
+        if isinstance(decision, AutoArchive) or decision.motivo == MOTIVO_SEM_DONO:
             decision = NeedsReview(reserva, decision.department)
-        elif decision.motivo == MOTIVO_SEM_DONO:
-            decision = NeedsReview(reserva, decision.department)
+        else:
+            decision = NeedsReview(f"{decision.motivo}; {reserva}", decision.department)
     if isinstance(decision, NeedsReview):
         return run.review(
             decision.motivo,
@@ -474,8 +550,21 @@ def _archive(
         )
     except IdentityChanged as error:
         # The rename happened and the identity check came after it: no automatic rollback.
-        if error.destino is not None:
+        # The move is recorded (SPEC §5-E) so the file can be found; an undo is refused by
+        # the hash, because the content is not the one of the record.
+        if error.destino is not None and intake.relative_path is not None:
             document.caminho = error.destino
+            store.add_operation(
+                ArchiveOperation(
+                    document_id=document.id,
+                    root_id=run.root.id,
+                    origem=intake.relative_path,
+                    destino=error.destino,
+                    sha256=document.sha256,
+                    ator=run.actor,
+                    modo=ArchiveMode.AUTO.value,
+                )
+            )
         return run.failed(f"identidade da origem mudou: {error}", destino=error.destino)
     except DomainError as error:
         # Name too long, no proven exclusive rename, suffixes exhausted, folder missing or
