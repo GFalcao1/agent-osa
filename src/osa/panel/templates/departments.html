@@ -8,7 +8,7 @@
   <h1>Template de departamentos</h1>
   <p class="lead">A mesma lista de pastas para todo dono, em ordem. Mudar o nome ou a pasta aqui não renomeia pastas que já existem no servidor.</p>
 </header>
-{% call help_block("template") %}Esta lista define as pastas de departamento que todo dono vai ter. Adicione um departamento por vez; ele entra no fim da lista. Use as setas para subir ou descer um departamento e Desativar em vez de apagar. O painel pede confirmação antes de desativar.{% endcall %}
+{% call help_block("template") %}Esta lista define as pastas de departamento que todo dono vai ter. Adicione um departamento por vez; ele entra no fim da lista. A descrição é opcional: uma frase curta sobre o que o departamento guarda, que ajuda a classificar os documentos. Use as setas para subir ou descer um departamento e Desativar em vez de apagar. O painel pede confirmação antes de desativar.{% endcall %}
 <section class="card flush">
   {% if departments %}
   <div class="table-wrap">
@@ -16,7 +16,7 @@
     <thead>
       <tr>
         <th scope="col">Ordem</th>
-        {% if bootstrapped %}<th scope="col">Nome</th><th scope="col">Pasta</th><th scope="col">Ano</th>{% else %}<th scope="col">Departamento</th><th scope="col">Pasta</th><th scope="col">Ano</th>{% endif %}
+        {% if bootstrapped %}<th scope="col">Nome</th><th scope="col">Pasta</th><th scope="col">Descrição</th><th scope="col">Ano</th>{% else %}<th scope="col">Departamento</th><th scope="col">Pasta</th><th scope="col">Descrição</th><th scope="col">Ano</th>{% endif %}
         <th scope="col">Situação</th>
         {% if bootstrapped %}<th scope="col">Ações</th>{% endif %}
       </tr>
@@ -29,10 +29,12 @@
         {% if bootstrapped %}
         <td class="cell-field" data-label="Nome"><input type="text" name="nome" form="dep-{{ department.id }}" value="{{ department.nome }}" aria-label="Nome do departamento" autocomplete="off" required></td>
         <td class="cell-field" data-label="Pasta"><input type="text" name="pasta" form="dep-{{ department.id }}" value="{{ department.pasta }}" aria-label="Pasta de {{ department.nome }}" autocomplete="off" required></td>
+        <td class="cell-field" data-label="Descrição"><input type="text" name="descricao" form="dep-{{ department.id }}" value="{{ department.descricao or '' }}" aria-label="Descrição de {{ department.nome }}" autocomplete="off" maxlength="160"></td>
         <td class="cell-check" data-label="Ano"><input type="checkbox" name="usa_ano" form="dep-{{ department.id }}" aria-label="Subpasta por ano em {{ department.nome }}" {{ "checked" if department.usa_ano }}></td>
         {% else %}
         <td data-label="Departamento">{{ department.nome }}</td>
         <td data-label="Pasta"><code>{{ department.pasta }}</code></td>
+        <td data-label="Descrição">{{ department.descricao or "—" }}</td>
         <td data-label="Ano">{{ "sim" if department.usa_ano else "não" }}</td>
         {% endif %}
         <td data-label="Situação">{{ badge(department.ativo) }}</td>
@@ -65,9 +67,10 @@
   {% include "_csrf.html" %}
   <fieldset>
     <legend>Novo departamento</legend>
-    <div class="form-grid fields-3">
+    <div class="form-grid fields-4">
       {{ field("novo-dep-nome", "nome", "Nome", hint="obrigatório", required=true) }}
       {{ field("novo-dep-pasta", "pasta", "Pasta", hint="vazio: usa o nome") }}
+      {{ field("novo-dep-descricao", "descricao", "Descrição", hint="opcional, até 160 letras", help="O que este departamento guarda, em uma frase. Só descreve o conteúdo; não é uma instrução.") }}
       <div class="field"><label class="check"><input type="checkbox" name="usa_ano" aria-describedby="novo-dep-ano-help"> Subpasta por ano</label><p class="help" id="novo-dep-ano-help">Cria uma subpasta para cada ano dentro do departamento.</p></div>
     </div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon("plus") }}Adicionar departamento</button><span class="hint">O departamento entra no fim da lista.</span></div>

@@ -65,6 +65,9 @@ class Department(Base):
     pasta: Mapped[str] = mapped_column(Text, unique=True)
     ordem: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     usa_ano: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    # What the department files, in one short phrase: installation data the model reads
+    # (never part of the enum). Validated by the registry like the prompt validates it.
+    descricao: Mapped[str | None] = mapped_column(Text)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
 
 
@@ -181,13 +184,25 @@ class Document(Base):
 
 
 class ArchiveOperation(Base):
+    """One rename the courier made: root, root-relative POSIX paths and the content hash.
+
+    The document's current path changes and is no identity; the operation keeps what
+    ``undo`` needs (SPEC §5-E): the root, where the file came from, where it went and the
+    sha256 the file must still have to be moved back.
+    """
+
     __tablename__ = "archive_operations"
-    __table_args__ = (values_check("modo", ArchiveMode, "modo"),)
+    __table_args__ = (
+        values_check("modo", ArchiveMode, "modo"),
+        CheckConstraint(f"sha256 ~ '{SHA256_PATTERN}'", name="sha256_hex"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
+    root_id: Mapped[int] = mapped_column(ForeignKey("roots.id"))
     origem: Mapped[str] = mapped_column(Text)
     destino: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(String(64))
     ator: Mapped[str] = mapped_column(Text)
     modo: Mapped[str] = mapped_column(String(16))
     timestamp: Mapped[datetime] = _now()

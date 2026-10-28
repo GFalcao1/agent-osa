@@ -63,6 +63,7 @@ class DepartmentEntry(_Entry):
     nome: str
     pasta: str
     usa_ano: bool = False
+    descricao: str | None = None
     ativo: bool = True
 
 
@@ -298,7 +299,13 @@ def registry_from_session(session: Session) -> Registry:
             for r in session.scalars(select(Root).order_by(Root.id))
         ],
         departamentos=[
-            DepartmentEntry(nome=d.nome, pasta=d.pasta, usa_ano=d.usa_ano, ativo=d.ativo)
+            DepartmentEntry(
+                nome=d.nome,
+                pasta=d.pasta,
+                usa_ano=d.usa_ano,
+                descricao=d.descricao,
+                ativo=d.ativo,
+            )
             for d in departments
         ],
         donos=[
@@ -387,6 +394,7 @@ def import_registry(
             nome=position.nome,
             pasta=position.pasta,
             usa_ano=position.usa_ano,
+            descricao=position.descricao,
             actor=actor,
         )
         department_ids[position.nome] = created.id

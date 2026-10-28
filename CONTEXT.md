@@ -19,15 +19,24 @@ _Evitar_: coleção, empresa (é só um tipo de dono), cliente
 Nome alternativo cadastrado de um dono (fantasia, razão social, abreviação) que resolve para o mesmo dono.
 
 **Evidência de dono**:
-CNPJ ou alias do cadastro encontrado por busca exata no texto do documento, ou dono declarado pelo operador. Única base aceita para arquivamento automático.
+CNPJ ou alias do cadastro encontrado por busca exata no texto do documento, ou dono declarado pelo operador. Única base aceita para arquivamento automático. O dono declarado vence a inferência; um texto que identifica só outro dono cadastrado leva o caso à revisão (`dono_divergente`), e vários donos sem declaração é ambíguo.
 _Evitar_: dono inferido pelo modelo
+
+**Dono declarado**:
+Dono que o operador nomeou por alias ou CNPJ exato e que o código resolveu no cadastro (`osa.courier.owners`), nunca o modelo.
+
+**Pedido de dono**:
+Dono novo citado por operador e desconhecido do cadastro; fica pendente até um administrador ativo confirmar (cria o dono e a árvore do template na raiz do upload) ou recusar. Só a confirmação cria algo; as duas respostas são auditadas.
+
+**Raiz do upload**:
+Raiz cuja quarentena recebe o upload de um dono: a primeira raiz ativa, na ordem do cadastro, que já tem a pasta do dono; senão, a primeira raiz ativa.
 
 **Departamento**:
 Nível fixo abaixo do dono na árvore, definido pelo template da instalação; também o setor de um usuário.
 _Evitar_: categoria, setor (para a pasta), subpasta
 
 **Descrição do departamento**:
-Frase curta e opcional (até 160 caracteres) que diz o que um departamento arquiva, cadastrada pelo administrador. Vai ao modelo num bloco de dados próprio do prompt, delimitado com o nonce, fora do delimitador do documento; descrição que soe como instrução ao modelo é recusada antes da chamada; nunca entra no enum nem no schema. Coluna, painel e export/import chegam antes de ligar a classificação ao correio (TASK-107).
+Frase curta e opcional (até 160 caracteres) que diz o que um departamento arquiva, cadastrada pelo administrador. Vai ao modelo num bloco de dados próprio do prompt, delimitado com o nonce, fora do delimitador do documento; descrição que soe como instrução ao modelo é recusada antes da chamada e pelo cadastro (painel e import, mesma regra); nunca entra no enum nem no schema.
 _Evitar_: categoria, rótulo, dica
 
 **Template**:
@@ -107,7 +116,7 @@ _Evitar_: mover, organizar, upload
 Arquivamento sem humano, permitido só com evidência de dono e envelope sem reserva.
 
 **Quarentena**:
-Pasta `.osa-quarentena` dentro de cada raiz onde o upload é gravado, com nome exclusivo, até o arquivamento. Fica no mesmo volume da árvore, então arquivar é rename. Criada pela aplicação na primeira gravação de upload, só com efeitos de filesystem ligados; nunca é destino de arquivamento nem entra no scan. O arquivo de pasta monitorada não passa por ela.
+Pasta `.osa-quarentena` dentro de cada raiz onde o upload é gravado, com nome exclusivo (um id mais a extensão normalizada do original), até o arquivamento. Fica no mesmo volume da árvore, então arquivar é rename. Criada pela aplicação na primeira gravação de upload, só com efeitos de filesystem ligados; nunca é destino de arquivamento nem entra no scan. O arquivo de pasta monitorada não passa por ela.
 _Evitar_: inbox, área temporária, pasta de entrada
 
 **Revisão**:
@@ -119,7 +128,7 @@ Resultado previsto de um efeito de filesystem que não aconteceu porque os efeit
 _Evitar_: dry-run, teste
 
 **Desfazer**:
-Rename inverso de um arquivamento registrado, dentro da mesma raiz, conferido pelo hash gravado na operação, nunca apagando.
+Rename inverso de um arquivamento registrado, dentro da mesma raiz, conferido pelo hash gravado na operação, nunca apagando. O documento volta a `NA_ORIGEM` e a operação inversa fica registrada (`modo = undo`); desfazer duas vezes é recusado.
 
 ### Pessoas
 
@@ -149,7 +158,7 @@ Registro em banco de cada documento conhecido: hash, caminho, dono, departamento
 _Evitar_: banco de hashes, catálogo
 
 **Duplicata**:
-Arquivo cujo sha256 já consta no índice; é informado, não arquivado de novo.
+Arquivo cujo sha256 já consta no índice como arquivado ou em revisão; é informado, não arquivado de novo. Um documento que falhou, ficou na origem ou não foi suportado é reprocessado na mesma entrada.
 
 **Scan**:
 Leitura das raízes para alimentar o índice com o que já está na árvore, sem mover nada.
@@ -161,7 +170,7 @@ Posição do documento no índice: `DETECTADO`, `ESTAVEL`, `EXTRAIDO`, `CLASSIFI
 Como o documento entrou no índice: `telegram`, `watched` (pasta monitorada) ou `scan`.
 
 **Auditoria**:
-Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. A chamada ao provedor externo grava `tentativa` antes da rede (guardada como `failed` com `fase = tentativa`, porque a tabela não tem "pendente") e `ok` ou `failed` só depois dela. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`). Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
+Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. A chamada ao provedor externo grava `tentativa` antes da rede (guardada como `failed` com `fase = tentativa`, porque a tabela não tem "pendente") e `ok` ou `failed` só depois dela. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`, `cli:process`, `cli:undo`). O correio grava um evento por etapa do documento (`document.detect`, `document.extract`, `document.classify`, `archive.intent`, `document.archive`, `document.review`, `document.fail`, `document.unsupported`, `document.duplicate`, `archive.undo`), sempre com o sha256 e nunca com texto; a recusa de classe sensível (`document.intake`, `denied`) não tem documento nem hash. Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
 
 ## Tabelas
 

@@ -12,11 +12,14 @@ monitorada recebe o mesmo tratamento para arquivos largados direto no servidor.
 
 ## Estado atual
 
-Spec v1 aprovada em 2026-10-15 após revisão de direção. TASK-101 (fundação:
-configuração, logs e CLI), TASK-102 (banco, modelo de dados e auditoria) e
-TASK-103 (cadastro, painel local e bootstrap) estão implementadas em `main`; o
-aceite de cada gate fica no registro de execução da própria task. A próxima da
-ordem é a TASK-104 (filesystem seguro e primitiva de arquivamento).
+Spec v1 aprovada em 2026-10-15 após revisão de direção. Em `main`: fundação,
+configuração e CLI (TASK-101), banco e auditoria (102), cadastro e painel local
+(103), filesystem seguro e arquivamento (104), extração por formato (105) e o
+provedor de modelo com envelopes e avaliação (106). A TASK-107 traz o correio:
+evidência de dono, decisão, pipeline da quarentena ao destino ou à revisão,
+desfazer e os comandos `osa process` e `osa undo`. O aceite de cada gate fica
+no registro de execução da própria task. A próxima da ordem é a TASK-108 (bot
+Telegram).
 
 `docs/` e `tasks/` estão no `.gitignore` nesta fase; existem localmente.
 
@@ -85,6 +88,13 @@ uv run pytest -q
 Trabalho em uma task por vez, conforme `AGENTS.md`. Suites `integration`,
 `native` e `live` dependem de PostgreSQL descartável, share SMB de teste e
 Ollama, respectivamente, e só rodam quando configuradas.
+
+O correio pode ser exercitado pela linha de comando, com banco migrado e
+cadastro feito: `uv run osa process <arquivo> --dono <alias ou CNPJ>` grava o
+arquivo na quarentena da raiz do dono, extrai, pede o envelope ao modelo local
+e arquiva ou abre revisão (com `OSA_ENABLE_FILE_EFFECTS=false`, o padrão, só
+simula); `uv run osa undo <operação>` desfaz um arquivamento pelo id da
+operação. Só com documentos fictícios fora da homologação.
 
 ## Ícones, fontes e animações do painel
 

@@ -393,21 +393,56 @@ def test_user_department_is_checked_by_fk(session: Session) -> None:
         session.flush()
 
 
+def _operation(session: Session, doc: Document, root: Root, **kw: object) -> ArchiveOperation:
+    values: dict[str, object] = {
+        "document_id": doc.id, "root_id": root.id, "origem": "a", "destino": "b",
+        "sha256": doc.sha256, "ator": "u", "modo": "auto",
+    }  # fmt: skip
+    values.update(kw)
+    operation = ArchiveOperation(**values)
+    session.add(operation)
+    session.flush()
+    return operation
+
+
 def test_archive_mode_and_review_state_are_restricted(session: Session) -> None:
     doc = document(session)
-    session.add(
-        ArchiveOperation(document_id=doc.id, origem="a", destino="b", ator="u", modo="auto")
-    )
+    root = Root(caminho="/srv/acervo-ficticio")
+    session.add(root)
+    session.flush()
+    _operation(session, doc, root)
     session.add(ReviewCase(document_id=doc.id, motivo="texto insuficiente"))
     session.flush()
     with rejected(session):
-        session.add(
-            ArchiveOperation(document_id=doc.id, origem="a", destino="b", ator="u", modo="move")
-        )
-        session.flush()
+        _operation(session, doc, root, modo="move")
     with rejected(session):
         session.add(ReviewCase(document_id=doc.id, motivo="x", estado="fechado"))
         session.flush()
+
+
+def test_archive_operation_requires_its_root_and_a_lowercase_sha256(session: Session) -> None:
+    """An operation is identified by root, root-relative paths and hash (SPEC §5-E)."""
+    doc = document(session)
+    root = Root(caminho="/srv/acervo-ficticio")
+    session.add(root)
+    session.flush()
+    with rejected(session):
+        _operation(session, doc, root, root_id=None)
+    with rejected(session):
+        _operation(session, doc, root, root_id=-1)
+    with rejected(session, match="ck_archive_operations_sha256_hex"):
+        _operation(session, doc, root, sha256="A" * 64)
+    with rejected(session):
+        _operation(session, doc, root, sha256=None)
+    assert _operation(session, doc, root, sha256=SHA_B).sha256 == SHA_B
+
+
+def test_department_description_is_optional_text(session: Session) -> None:
+    session.add(Department(nome="Fiscal", pasta="01 Fiscal", descricao="Notas e guias"))
+    session.add(Department(nome="Pessoal", pasta="02 Pessoal"))
+    session.flush()
+    by_name = {d.nome: d.descricao for d in session.scalars(select(Department))}
+    assert by_name == {"Fiscal": "Notas e guias", "Pessoal": None}
 
 
 def test_review_case_defaults_to_open(session: Session) -> None:

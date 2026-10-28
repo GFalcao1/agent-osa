@@ -59,6 +59,7 @@ SCREEN_LABELS: Final = {
     "Cadastrar raiz": "/roots",
     "Nova pasta monitorada": "/roots",
     "Adicionar departamento": "/departments",
+    "Descrição": "/departments",
     "Subpasta por ano": "/departments",
     "Subir": "/departments",
     "Descer": "/departments",
@@ -257,6 +258,19 @@ PROBLEMS: Final[dict[str, tuple[Problem, ...]]] = {
             "nome inválido",
             "O nome passou de 200 letras.",
             "Use um nome mais curto.",
+        ),
+        Problem(
+            "descrição do departamento inválido",
+            "A descrição passou de 160 letras.",
+            "Encurte a descrição. Uma frase basta.",
+        ),
+        Problem(
+            "descrição parece instrução ao modelo; descreva só o que o departamento arquiva",
+            "A descrição tem uma frase que parece uma ordem para o programa que classifica os "
+            "documentos, como “ignore as regras”, “marque sempre” ou “você deve”. "
+            "A descrição é só informação sobre o departamento.",
+            "Reescreva dizendo apenas que tipo de documento o departamento guarda. "
+            "Exemplo: “Notas fiscais, guias de impostos e certidões”.",
         ),
         *FOLDER_NAME_PROBLEMS,
         Problem(

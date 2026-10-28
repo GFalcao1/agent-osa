@@ -441,6 +441,15 @@ def _checked_description(item: Department) -> str:
     return text
 
 
+def checked_description(text: str) -> str:
+    """The cleaned description of one department, or ``DepartmentDescriptionRejected``.
+
+    The registry (panel and import) runs this same check when a description is saved, so a
+    description that the prompt would refuse never reaches the courier (ADR-0012, decision 7).
+    """
+    return _checked_description(Department("-", text))
+
+
 def department_lines(departments: Sequence[Department]) -> str:
     """``- "Name": description`` per department (just the name when there is none).
 
