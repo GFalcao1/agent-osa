@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import secrets
 
+from osa.core.logging import get_logger
 from osa.courier.owners import OwnerRequest
 from osa.domain.errors import DomainError
 from osa.telegram import texts
@@ -23,6 +24,7 @@ from osa.telegram.ports import (
 )
 
 PREFIX = "ow:"
+log = get_logger("osa.telegram.owners")
 
 
 def request_owner(
@@ -51,11 +53,20 @@ def request_owner(
     buttons = [
         [Button("Criar dono", f"{PREFIX}{token}:y"), Button("Recusar", f"{PREFIX}{token}:n")]
     ]
-    for admin in admins:
-        message_id = ctx.bot.send(admin.telegram_id, text, buttons)
-        pending.admin_messages.append((admin.telegram_id, message_id))
+    # Registered before the first send: an admin may press the button before the loop ends.
     with ctx.state.lock:
         ctx.state.owner_requests[token] = pending
+    for admin in admins:
+        try:
+            message_id = ctx.bot.send(admin.telegram_id, text, buttons)
+        except Exception:  # an admin who never opened the bot cannot be messaged
+            log.exception("telegram.admin_unreachable", admin=admin.user_id)
+            continue
+        pending.admin_messages.append((admin.telegram_id, message_id))
+    if not pending.admin_messages:
+        with ctx.state.lock:
+            ctx.state.owner_requests.pop(token, None)
+        return None
     return token
 
 
@@ -70,7 +81,7 @@ def handle_owner_callback(ctx: BotContext, cb: Callback) -> None:
     with ctx.state.lock:
         pending = ctx.state.owner_requests.pop(token, None)
     if pending is None:
-        ctx.bot.answer(cb.callback_id, texts.DIALOG_LOST)
+        ctx.bot.answer(cb.callback_id, texts.REQUEST_ANSWERED)
         return
     name = pending.request.nome
     if answer != "y":
@@ -81,10 +92,18 @@ def handle_owner_callback(ctx: BotContext, cb: Callback) -> None:
         return
     try:
         owner = ctx.courier.confirm_owner(pending.request, admin=actor)
-    except DomainError as error:
+    except (DomainError, ValueError, OSError) as error:
         ctx.bot.answer(cb.callback_id)
-        _tell_admins(ctx, pending, f"Dono «{name}» não criado: {error}")
-        ctx.bot.send(pending.requester_chat_id, f"O dono «{name}» não foi criado: {error}")
+        created = ctx.courier.resolve_owner(name)
+        if created is not None:
+            # The owner was committed before its tree (SPEC §10): say exactly that.
+            text = texts.OWNER_TREE_FAILED.format(nome=created.nome_fantasia, erro=error)
+        else:
+            text = f"O dono «{name}» não foi criado: {error}"
+        _tell_admins(ctx, pending, text)
+        ctx.bot.send(pending.requester_chat_id, text)
+        if pending.upload is not None:
+            _drop_upload(ctx, pending.upload)
         return
     ctx.bot.answer(cb.callback_id)
     _tell_admins(ctx, pending, f"Dono «{owner.nome_fantasia}» criado por {actor.nome}.")
@@ -95,6 +114,15 @@ def handle_owner_callback(ctx: BotContext, cb: Callback) -> None:
         run_upload(ctx, pending.upload, owner)
 
 
+def _drop_upload(ctx: BotContext, upload: PendingUpload) -> None:
+    with ctx.state.lock:
+        ctx.state.uploads.pop((upload.chat_id, upload.actor.user_id), None)
+
+
 def _tell_admins(ctx: BotContext, pending: PendingOwnerRequest, text: str) -> None:
+    """Best effort: one admin's deleted message must not stop the others or the operator."""
     for chat_id, message_id in pending.admin_messages:
-        ctx.bot.edit(chat_id, message_id, text)
+        try:
+            ctx.bot.edit(chat_id, message_id, text)
+        except Exception:
+            log.exception("telegram.admin_edit_failed", chat_id=chat_id)

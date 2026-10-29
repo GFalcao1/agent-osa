@@ -27,7 +27,7 @@ from telegram.ext import (
 
 from osa.core.logging import configure_logging, get_logger, log_context
 from osa.core.settings import Settings
-from osa.telegram import jobs
+from osa.telegram import auth, jobs
 from osa.telegram.handlers import admin, owners, review, upload
 from osa.telegram.ports import (
     BotContext,
@@ -43,7 +43,8 @@ from osa.telegram.ports import (
 
 log = get_logger("osa.telegram")
 
-REMINDER_TIME = datetime.time(hour=9, minute=0)
+# 9h in this machine's time zone (the job queue would otherwise read a naive time as UTC).
+REMINDER_TIME = datetime.time(hour=9, minute=0, tzinfo=datetime.datetime.now().astimezone().tzinfo)
 COMMANDS = ("start", "status", "desfazer", "pendentes")
 CALL_TIMEOUT = 120.0
 
@@ -79,9 +80,14 @@ class PtbBot:
                 raise
 
     def answer(self, callback_id: str, text: str | None = None) -> None:
-        self._run(
-            self._application.bot.answer_callback_query(callback_query_id=callback_id, text=text)
-        )
+        try:
+            self._run(
+                self._application.bot.answer_callback_query(
+                    callback_query_id=callback_id, text=text
+                )
+            )
+        except BadRequest as error:  # the query expired while the handler worked: not fatal
+            log.warning("telegram.answer_late", error=str(error))
 
     def download(self, file_id: str) -> bytes:
         file = self._run(self._application.bot.get_file(file_id))
@@ -112,6 +118,7 @@ def build_application(
             state=state,
             reviewers_chat_id=settings.telegram_reviewers_chat_id,
             effects_enabled=settings.enable_file_effects,
+            sensitive_extensions=tuple(settings.sensitive_extensions),
         )
         if application.job_queue is not None:
             application.job_queue.run_daily(_reminder, time=REMINDER_TIME, name="lembrete")
@@ -124,12 +131,17 @@ def build_application(
         .post_init(post_init)
         .build()
     )
-    application.add_handler(MessageHandler(filters.Document.ALL, _on_document))
+    private = filters.ChatType.PRIVATE
+    application.add_handler(MessageHandler(filters.Document.ALL & private, _on_document))
+    application.add_handler(MessageHandler(filters.Document.ALL & ~private, _on_group_document))
     application.add_handler(MessageHandler(filters.PHOTO, _on_photo))
     for name in COMMANDS:
         application.add_handler(CommandHandler(name, _on_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _on_text))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, _on_text))
     application.add_handler(CallbackQueryHandler(_on_callback))
+    # Everything else (stickers, voice, text in groups): known users are ignored, unknown
+    # ids are audited (SPEC §3), nobody gets a reply.
+    application.add_handler(MessageHandler(filters.ALL, _on_other))
     return application
 
 
@@ -138,9 +150,9 @@ def _ctx(context: ContextTypes.DEFAULT_TYPE) -> BotContext:
     return ctx
 
 
-async def _in_thread(work: Any, *args: Any) -> Any:
+async def _in_thread(work: Any, *args: Any, **kwargs: Any) -> Any:
     with log_context(request_id=uuid.uuid4().hex):
-        return await asyncio.to_thread(work, *args)
+        return await asyncio.to_thread(work, *args, **kwargs)
 
 
 async def _on_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -161,15 +173,32 @@ async def _on_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def _on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message, user = update.effective_message, update.effective_user
-    if message is None or user is None:
+    message, user, chat = update.effective_message, update.effective_user, update.effective_chat
+    if message is None or user is None or chat is None:
         return
-    ctx = _ctx(context)
-    if await _in_thread(ctx.courier.actor, user.id) is None:
+    actor = await _in_thread(auth.identify, _ctx(context), user.id, chat.id, kind="photo")
+    if actor is None:
         return
     await message.reply_text(
         "Envie a imagem como arquivo (anexo), não como foto: assim ela chega sem compressão."
     )
+
+
+async def _on_group_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message, user, chat = update.effective_message, update.effective_user, update.effective_chat
+    if message is None or user is None or chat is None:
+        return
+    actor = await _in_thread(auth.identify, _ctx(context), user.id, chat.id, kind="group_document")
+    if actor is None:
+        return
+    await message.reply_text("Envie documentos na conversa privada com o bot, não no grupo.")
+
+
+async def _on_other(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user, chat = update.effective_user, update.effective_chat
+    if user is None or chat is None:
+        return
+    await _in_thread(auth.identify, _ctx(context), user.id, chat.id, kind="other")
 
 
 async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

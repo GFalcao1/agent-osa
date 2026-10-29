@@ -766,6 +766,17 @@ def _owner_conflicts(
     return [key for key in keys if key not in own]
 
 
+def check_owner_name(nome_fantasia: str) -> str:
+    """The display name of an owner if the registry would accept it (text and folder rules).
+
+    What the bot asks before sending a "new owner" request to the administrator, so the
+    confirmation cannot fail on the name. ``ValueError`` with the registry's own message.
+    """
+    name = _text(nome_fantasia, "nome fantasia")
+    derive_folder_name(name)
+    return name
+
+
 def create_owner(
     session: Session,
     *,

@@ -46,6 +46,7 @@ from osa.courier.undo import undo_operation
 from osa.db.models import ArchiveOperation, Department, Document, Owner, ReviewCase, Root, User
 from osa.domain.document import FileClass, Origin
 from osa.domain.errors import (
+    AccessDenied,
     Conflict,
     ExtractionFailed,
     NotFound,
@@ -157,7 +158,7 @@ class MemoryStore:
     def operations_of(self, document_id: int) -> list[ArchiveOperation]:
         return [o for o in self.operations if o.document_id == document_id]
 
-    def review_case(self, case_id: int) -> ReviewCase:
+    def review_case(self, case_id: int, *, for_update: bool = False) -> ReviewCase:
         found = next((c for c in self.reviews if c.id == case_id), None)
         if found is None:
             raise NotFound("caso de revisão não encontrado")
@@ -477,9 +478,15 @@ def scenario(
         Department(id=2, nome="Pessoal", pasta="02 Pessoal", ordem=2, usa_ano=False, ativo=True),
         Department(id=3, nome="Antigo", pasta="03 Antigo", ordem=3, usa_ano=False, ativo=False),
     ]  # fmt: skip
+    users = [
+        User(id=1, telegram_id=1001, nome="Admin", papel="admin", departamento_id=None, ativo=True),
+        User(id=2, telegram_id=2002, nome="Maria", papel="reviewer", departamento_id=1, ativo=True),
+        User(id=3, telegram_id=3003, nome="João", papel="reviewer", departamento_id=2, ativo=True),
+        User(id=4, telegram_id=4004, nome="Ana", papel="operator", departamento_id=1, ativo=True),
+    ]
     store = MemoryStore(
         [root], [alfa, beta], {1: ["alfa", "alfa comercio"], 2: ["beta", "beta servicos"]},
-        departments,
+        departments, users,
     )  # fmt: skip
     fs = FakeFs(store)
     if relative is not None:
@@ -1140,3 +1147,57 @@ def test_document_only_simulated_cannot_be_decided() -> None:
             1, owner_id=1, department_id=1, store=sc.store, fs=sc.fs, actor="t", decided_by=1,
             effects_enabled=False,
         )  # fmt: skip
+
+
+def test_only_the_department_reviewers_or_the_admin_decide_in_the_courier() -> None:
+    sc = _review_scenario()  # suggested department: Fiscal (id 1)
+    for user_id in (3, 4):  # a reviewer of Pessoal, an operator
+        with pytest.raises(AccessDenied):
+            decide_case(
+                1, owner_id=2, department_id=2, store=sc.store, fs=sc.fs, actor="t",
+                decided_by=user_id, effects_enabled=True,
+            )  # fmt: skip
+        with pytest.raises(AccessDenied):
+            leave_at_origin(1, store=sc.store, actor="t", decided_by=user_id)
+    assert sc.store.reviews[0].estado == "aberto" and sc.store.operations == []
+    outcome = decide_case(
+        1, owner_id=2, department_id=2, store=sc.store, fs=sc.fs, actor="telegram:1001",
+        decided_by=1, effects_enabled=True,
+    )  # fmt: skip
+    assert isinstance(outcome, Archived)
+
+
+def test_a_case_without_department_is_for_any_reviewer_but_not_an_operator() -> None:
+    sc = scenario(declared=None, text="recibo sem dono")
+    outcome = sc.run()
+    assert isinstance(outcome, Reviewed) and outcome.departamento_sugerido_id == 1
+    sc.store.reviews[0].departamento_sugerido_id = None
+    with pytest.raises(AccessDenied):
+        leave_at_origin(1, store=sc.store, actor="t", decided_by=4)
+    result = leave_at_origin(1, store=sc.store, actor="telegram:3003", decided_by=3)
+    assert result.estado == "NA_ORIGEM"
+
+
+def test_review_decision_that_fails_after_the_rename_still_closes_the_case() -> None:
+    sc = _review_scenario()
+    sc.fs.archive_error = IdentityChanged("trocado", destino="Beta Serviços/02 Pessoal/nota.pdf")
+    outcome = _decide(sc)
+    assert isinstance(outcome, Failed)
+    assert (sc.store.reviews[0].estado, sc.store.reviews[0].decidido_por) == ("decidido", 2)
+    assert sc.document.estado == "FALHOU"
+    assert sc.store.committed[-1]["acao"] == "review.decide"
+    assert sc.store.committed[-1]["resultado"] == "failed"
+
+
+def test_the_case_row_is_locked_for_the_decision() -> None:
+    sc = _review_scenario()
+    seen: list[bool] = []
+    original = sc.store.review_case
+
+    def spying(case_id: int, *, for_update: bool = False) -> Any:
+        seen.append(for_update)
+        return original(case_id, for_update=for_update)
+
+    sc.store.review_case = spying  # type: ignore[method-assign]
+    _decide(sc)
+    assert seen == [True]

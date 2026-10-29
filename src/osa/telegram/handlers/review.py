@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from osa.courier.pipeline import Archived, ArchiveRefused, Reviewed
+from osa.courier.pipeline import ArchiveRefused, Reviewed
 from osa.domain.document import ReviewState
 from osa.domain.errors import DomainError
 from osa.telegram import texts
@@ -104,6 +104,9 @@ def handle_review_callback(ctx: BotContext, cb: Callback) -> None:
         ctx.bot.answer(cb.callback_id, texts.DIALOG_LOST)
         return
     if not may_decide(actor, case.departamento_sugerido_id):
+        if not actor.is_reviewer:
+            ctx.bot.answer(cb.callback_id, texts.ONLY_REVIEWERS_DECIDE)
+            return
         name = next(
             (d.nome for d in ctx.courier.departments() if d.id == case.departamento_sugerido_id),
             "outro departamento",
@@ -134,18 +137,11 @@ def handle_review_callback(ctx: BotContext, cb: Callback) -> None:
         ctx.bot.answer(cb.callback_id)
         ctx.bot.edit(cb.chat_id, cb.message_id, render(ctx, case, draft), keyboard(case, draft))
     elif action == "go":
-        _archive(ctx, actor, case, draft, cb)
+        with ctx.state.case_lock(case.id):
+            _archive(ctx, actor, case, draft, cb)
     elif action == "orig":
-        result = ctx.courier.leave_at_origin(case.id, actor=actor)
-        _close(ctx, case)
-        ctx.bot.answer(cb.callback_id)
-        ctx.bot.edit(
-            cb.chat_id,
-            cb.message_id,
-            render(ctx, case, draft)
-            + f"\n\n{texts.describe_outcome(result, tipo=None, resumo=None)}"
-            f" Decidido por {actor.nome}.",
-        )
+        with ctx.state.case_lock(case.id):
+            _leave(ctx, actor, case, draft, cb)
     else:  # "m" and anything unknown: back to the main keyboard
         ctx.bot.answer(cb.callback_id)
         ctx.bot.edit(cb.chat_id, cb.message_id, render(ctx, case, draft), keyboard(case, draft))
@@ -178,6 +174,23 @@ def _owner_pages(ctx: BotContext, case: CaseInfo, page: int) -> Keyboard:
     return rows
 
 
+def _leave(ctx: BotContext, actor: Actor, case: CaseInfo, draft: ReviewDraft, cb: Callback) -> None:
+    try:
+        result = ctx.courier.leave_at_origin(case.id, actor=actor)
+    except DomainError as error:  # decided meanwhile, or refused by the courier
+        ctx.bot.answer(cb.callback_id, str(error))
+        return
+    _close(ctx, case)
+    ctx.bot.answer(cb.callback_id)
+    ctx.bot.edit(
+        cb.chat_id,
+        cb.message_id,
+        render(ctx, case, draft)
+        + f"\n\n{texts.describe_outcome(result, tipo=None, resumo=None)}"
+        + f" Decidido por {actor.nome}.",
+    )
+
+
 def _archive(
     ctx: BotContext, actor: Actor, case: CaseInfo, draft: ReviewDraft, cb: Callback
 ) -> None:
@@ -202,8 +215,7 @@ def _archive(
         return
     document = ctx.courier.document(case.document_id)
     ctx.bot.answer(cb.callback_id)
-    if isinstance(outcome, Archived):
-        _close(ctx, case)
+    _close(ctx, case)  # Archived or Failed: the case is decided either way
     ctx.bot.edit(
         cb.chat_id,
         cb.message_id,

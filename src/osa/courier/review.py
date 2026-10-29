@@ -23,9 +23,10 @@ from osa.courier.pipeline import (
 from osa.courier.ports import FsPort
 from osa.courier.store import Store
 from osa.db.audit import RESULT_DENIED, RESULT_FAILED, RESULT_OK
-from osa.db.models import Document, ReviewCase
+from osa.db.models import Document, ReviewCase, User
 from osa.domain.document import ArchiveMode, DocumentState, ReviewState
-from osa.domain.errors import Conflict, NotFound
+from osa.domain.errors import AccessDenied, Conflict, NotFound
+from osa.domain.user import Role
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,14 +36,29 @@ class LeftAtOrigin:
     case_id: int
 
 
-def _open_case(store: Store, case_id: int) -> tuple[ReviewCase, Document]:
-    case = store.review_case(case_id)
+def _open_case(store: Store, case_id: int, decided_by: int) -> tuple[ReviewCase, Document]:
+    """The open case, locked for this decision, after checking who decides (SPEC §5-D)."""
+    case = store.review_case(case_id, for_update=True)
     if case.estado != ReviewState.ABERTO.value:
         raise Conflict("caso de revisão já decidido")
     document = store.document(case.document_id)
     if document.estado != DocumentState.EM_REVISAO.value:
         raise Conflict("documento não está em revisão")
+    ensure_may_decide(store.user(decided_by), case.departamento_sugerido_id)
     return case, document
+
+
+def ensure_may_decide(user: User, suggested_department_id: int | None) -> None:
+    """An active administrator, or an active reviewer of the suggested department (any
+    reviewer when the case has none); anyone else is refused."""
+    if not user.ativo:
+        raise AccessDenied("usuário inativo não decide revisão")
+    if user.papel == Role.ADMIN.value:
+        return
+    if user.papel != Role.REVIEWER.value:
+        raise AccessDenied("só revisores e o administrador decidem uma revisão")
+    if suggested_department_id is not None and user.departamento_id != suggested_department_id:
+        raise AccessDenied("este caso é dos revisores de outro departamento")
 
 
 def year_for(document: Document, department: TemplateDepartment) -> tuple[int | None, bool]:
@@ -79,7 +95,7 @@ def decide_case(
     department outside the active template; ``ArchiveRefused`` when the share refuses the
     rename (the case stays open). The case closes only on ``Archived``.
     """
-    case, document = _open_case(store, case_id)
+    case, document = _open_case(store, case_id, decided_by)
     if document.caminho is None or document.root_id is None:
         raise Conflict("documento sem arquivo na raiz: foi só simulado")
     owner = store.owner(owner_id)
@@ -119,6 +135,11 @@ def decide_case(
         store.commit()
         raise
     if isinstance(outcome, Failed):
+        # The rename happened (and is recorded) but the source changed meanwhile: the case
+        # is decided all the same; the document is FALHOU for the administrator to look at.
+        case.estado = ReviewState.DECIDIDO.value
+        case.decidido_por = decided_by
+        store.save()
         store.audit(
             ator=actor,
             acao="review.decide",
@@ -156,7 +177,7 @@ def decide_case(
 
 def leave_at_origin(case_id: int, *, store: Store, actor: str, decided_by: int) -> LeftAtOrigin:
     """Close the case leaving the file where it is: ``NA_ORIGEM``, nothing moved."""
-    case, document = _open_case(store, case_id)
+    case, document = _open_case(store, case_id, decided_by)
     document.estado = DocumentState.NA_ORIGEM.value
     document.motivo = "deixado na origem pela revisão"
     case.estado = ReviewState.ORIGEM.value

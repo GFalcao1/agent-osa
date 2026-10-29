@@ -56,7 +56,9 @@ class Store(Protocol):
 
     def operations_of(self, document_id: int) -> Sequence[ArchiveOperation]: ...
 
-    def review_case(self, case_id: int) -> ReviewCase: ...
+    def review_case(self, case_id: int, *, for_update: bool = False) -> ReviewCase:
+        """The case; ``for_update`` locks its row until the commit (a decision in progress)."""
+        ...
 
     def open_review_cases(self) -> Sequence[ReviewCase]: ...
 
@@ -168,8 +170,11 @@ class SqlStore:
             )
         )
 
-    def review_case(self, case_id: int) -> ReviewCase:
-        return self._get(ReviewCase, case_id, "caso de revisão")
+    def review_case(self, case_id: int, *, for_update: bool = False) -> ReviewCase:
+        found = self._session.get(ReviewCase, case_id, with_for_update=for_update or None)
+        if found is None:
+            raise NotFound("caso de revisão não encontrado")
+        return found
 
     def open_review_cases(self) -> Sequence[ReviewCase]:
         return list(

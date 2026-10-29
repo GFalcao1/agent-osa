@@ -7,6 +7,8 @@ from osa.telegram import texts
 from osa.telegram.auth import identify
 from osa.telegram.ports import Actor, BotContext, CaseInfo, IncomingCommand
 
+MAX_LISTED = 30
+
 STATE_LABELS = {
     "DETECTADO": "detectados",
     "ESTAVEL": "estáveis",
@@ -110,7 +112,7 @@ def pending_text(ctx: BotContext, cases: list[CaseInfo]) -> str:
         return "Nenhuma revisão pendente."
     departments = {d.id: d.nome for d in ctx.courier.departments()}
     lines = []
-    for case in cases:
+    for case in cases[:MAX_LISTED]:
         document = ctx.courier.document(case.document_id)
         department = departments.get(case.departamento_sugerido_id or -1, "sem departamento")
         when = f", desde {case.criado_em:%d/%m}" if case.criado_em else ""
@@ -118,4 +120,6 @@ def pending_text(ctx: BotContext, cases: list[CaseInfo]) -> str:
             f"- caso {case.id}: {document.tipo_documental or 'documento'} · "
             f"{texts.describe_reason(case.motivo)} · {department}{when}"
         )
+    if len(cases) > MAX_LISTED:
+        lines.append(f"… e mais {len(cases) - MAX_LISTED}.")
     return f"Revisões pendentes ({len(cases)}):\n" + "\n".join(lines)

@@ -66,6 +66,8 @@ class FakeBot:
         self._next_id = 100
 
     def send(self, chat_id: int, text: str, buttons: Keyboard = ()) -> int:
+        if chat_id in self.unreachable:
+            raise RuntimeError("Forbidden: bot can't initiate conversation with a user")
         self._next_id += 1
         self.sent.append((chat_id, text, [list(row) for row in buttons]))
         return self._next_id
@@ -81,6 +83,8 @@ class FakeBot:
         if file_id not in self.files:
             raise RuntimeError("download falhou")
         return self.files[file_id]
+
+    unreachable: set[int] = set()  # chats whose sends fail (a user who never opened the bot)
 
     def texts_to(self, chat_id: int) -> list[str]:
         return [text for chat, text, _ in self.sent if chat == chat_id]
@@ -124,6 +128,9 @@ class FakeCourier:
     def resolve_owner(self, text: str) -> OwnerInfo | None:
         owner_id = self.aliases.get(normalize_text(text) if text.strip() else "")
         return self.owners_by_id.get(owner_id) if owner_id is not None else None
+
+    def owner_name_problem(self, text: str) -> str | None:
+        return None if normalize_text(text) else "nome de pasta não pode ser vazio"
 
     def suggest_owners(self, text: str, limit: int = 5) -> Sequence[OwnerInfo]:
         key = normalize_text(text)[:3]
@@ -293,6 +300,23 @@ def test_sensitive_extension_is_refused_before_any_download(world: World) -> Non
     assert "sensível" in event["detalhes"]["motivo"]
 
 
+def test_installation_sensitive_extensions_are_honoured(world: World) -> None:
+    world.ctx = BotContext(
+        world.courier, world.bot, world.ctx.state, REVIEWERS_CHAT, True,
+        sensitive_extensions=(".pfx", ".ovpn"),
+    )  # fmt: skip
+    world.document(name="acesso.ovpn")
+    assert world.bot.downloads == [] and world.bot.texts_to(4004) == [texts.SENSITIVE_REFUSED]
+
+
+def test_a_second_document_without_owner_replaces_the_first_and_says_so(world: World) -> None:
+    world.document(caption=None, name="a.pdf")
+    world.document(caption=None, name="b.pdf")
+    assert texts.PREVIOUS_UPLOAD_DROPPED in world.bot.texts_to(4004)
+    world.text("alfa")
+    assert [u[1] for u in world.courier.uploads] == ["b.pdf"]
+
+
 def test_file_above_the_download_limit_is_sent_to_the_share(world: World) -> None:
     world.document(size=21 * 1024 * 1024)
     assert world.bot.downloads == [] and world.bot.texts_to(4004) == [texts.TOO_BIG]
@@ -448,6 +472,60 @@ def test_only_an_admin_answers_an_owner_request(world: World) -> None:
     assert token in world.ctx.state.owner_requests
 
 
+def test_owner_name_the_registry_refuses_is_rejected_before_asking_the_admin(
+    world: World,
+) -> None:
+    world.document(caption="???")
+    world.press("up:new")
+    assert world.bot.edits[-1][2] == texts.OWNER_NAME_INVALID.format(
+        erro="nome de pasta não pode ser vazio"
+    )
+    assert world.bot.texts_to(1001) == [] and world.ctx.state.owner_requests == {}
+    assert world.text("Gama Indústria") is True  # the upload still waits for a name
+    assert world.bot.sent[-1][1] == texts.NO_OWNER_MATCH
+
+
+def test_request_survives_an_unreachable_admin(world: World) -> None:
+    world.courier.users[5005] = Actor(5, 5005, "Outro Admin", "admin", None)
+    world.bot.unreachable = {5005}
+    world.document(caption="Gama Indústria")
+    world.press("up:new")
+    assert world.bot.edits[-1][2] == texts.OWNER_REQUEST_SENT.format(nome="Gama Indústria")
+    [pending] = world.ctx.state.owner_requests.values()
+    assert [chat for chat, _ in pending.admin_messages] == [1001]
+    world.bot.unreachable = set()
+    world.press(f"ow:{pending.token}:y", from_id=1001)
+    assert len(world.courier.confirmed) == 1
+
+
+def test_second_admin_pressing_after_the_first_is_told_so(world: World) -> None:
+    world.courier.users[5005] = Actor(5, 5005, "Outro Admin", "admin", None)
+    world.document(caption="Gama Indústria")
+    world.press("up:new")
+    token = next(iter(world.ctx.state.owner_requests))
+    world.press(f"ow:{token}:y", from_id=1001)
+    world.press(f"ow:{token}:n", from_id=5005)
+    assert len(world.courier.confirmed) == 1 and world.courier.refused == []
+    assert world.bot.answers[-1] == ("cb1", texts.REQUEST_ANSWERED)
+
+
+def test_confirmation_failure_after_the_owner_exists_says_the_tree_failed(world: World) -> None:
+    def failing_confirm(request: OwnerRequest, *, admin: Actor) -> OwnerInfo:
+        owner = OwnerInfo(9, request.nome, request.nome)
+        world.courier.owners_by_id[9] = owner
+        world.courier.aliases[normalize_text(request.nome)] = 9
+        raise OSError("share desmontado")
+
+    world.courier.confirm_owner = failing_confirm  # type: ignore[method-assign]
+    world.document(caption="Gama Indústria")
+    world.press("up:new")
+    token = next(iter(world.ctx.state.owner_requests))
+    world.press(f"ow:{token}:y", from_id=1001)
+    expected = texts.OWNER_TREE_FAILED.format(nome="Gama Indústria", erro="share desmontado")
+    assert world.bot.edits[-1][2] == expected and expected in world.bot.texts_to(4004)
+    assert world.courier.uploads == [] and world.ctx.state.uploads == {}
+
+
 def test_without_an_admin_the_request_is_refused_up_front(world: World) -> None:
     del world.courier.users[1001]
     world.document(caption="Gama Indústria")
@@ -489,6 +567,29 @@ def test_operator_cannot_decide(world: World) -> None:
     _open_review(world)
     world.press("rv:1:orig", from_id=4004, chat_id=REVIEWERS_CHAT)
     assert world.courier.origins == []
+    assert world.bot.answers[-1] == ("cb1", texts.ONLY_REVIEWERS_DECIDE)
+
+
+def test_failed_decision_closes_the_draft_too(world: World) -> None:
+    _open_review(world)
+
+    def failing(case_id: int, *, owner_id: int, department_id: int, actor: Actor) -> Failed:
+        return Failed(1, "FALHOU", "identidade da origem mudou")
+
+    world.courier.decide_case = failing  # type: ignore[method-assign]
+    world.press("rv:1:go", from_id=1001, chat_id=REVIEWERS_CHAT)
+    assert world.ctx.state.drafts == {} and "Falhou" in world.bot.edits[-1][2]
+
+
+def test_pending_list_is_capped(world: World) -> None:
+    for i in range(1, 41):
+        world.courier.cases[i] = CaseInfo(i, i, "aberto", "ano_ausente", None, None)
+        world.courier.documents[i] = DocumentInfo(
+            i, f"{i}.pdf", "EM_REVISAO", "recibo", None, None, None, None, None, 4
+        )
+    world.command("pendentes")
+    text = world.bot.texts_to(1001)[-1]
+    assert "Revisões pendentes (40)" in text and "… e mais 10." in text and len(text) < 4096
 
 
 def test_reviewer_of_the_department_archives_through_the_courier(world: World) -> None:
@@ -658,3 +759,18 @@ def test_start_greets_known_users_only(world: World) -> None:
 
 def test_owner_and_review_modules_expose_their_prefixes() -> None:
     assert (upload.PREFIX, owners.PREFIX, review.PREFIX) == ("up:", "ow:", "rv:")
+
+
+def test_the_reminder_time_carries_the_local_time_zone() -> None:
+    from osa.telegram.app import REMINDER_TIME
+
+    assert (REMINDER_TIME.hour, REMINDER_TIME.minute) == (9, 0)
+    assert REMINDER_TIME.tzinfo is not None
+
+
+def test_effects_off_failure_reply_does_not_mention_the_quarantine(world: World) -> None:
+    world.ctx = BotContext(world.courier, world.bot, world.ctx.state, REVIEWERS_CHAT, False)
+    world.courier.next_outcome = Failed(1, "FALHOU", "modelo indisponível")
+    world.document()
+    reply = world.bot.texts_to(4004)[-1]
+    assert "Nada foi gravado" in reply and "quarentena" not in reply

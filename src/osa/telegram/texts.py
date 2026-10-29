@@ -59,6 +59,17 @@ ONLY_REVIEWER: Final = "Só revisores e o administrador usam este comando."
 NOT_YOUR_DEPARTMENT: Final = "Este caso é dos revisores de {departamento}."
 ALREADY_DECIDED: Final = "Este caso já foi decidido."
 DIALOG_LOST: Final = "Esse pedido não está mais em memória (o bot reiniciou). Peça de novo."
+REQUEST_ANSWERED: Final = "Este pedido já foi respondido, ou o bot reiniciou."
+ONLY_REVIEWERS_DECIDE: Final = "Só revisores e o administrador decidem uma revisão."
+PREVIOUS_UPLOAD_DROPPED: Final = (
+    "O arquivo anterior, que esperava o dono, foi descartado; envie-o de novo se precisar."
+)
+OWNER_NAME_INVALID: Final = "Esse nome não serve para um dono ({erro}). Escreva outro nome."
+OWNER_TREE_FAILED: Final = (
+    "Dono «{nome}» cadastrado, mas as pastas dele não foram criadas: {erro}. "
+    "O administrador precisa olhar o servidor."
+)
+UPLOAD_FAILED: Final = "Não consegui guardar o arquivo para processar. Envie de novo."
 CONFIG_ERROR: Final = (
     "O cadastro impede a classificação: {erro}. O administrador precisa corrigir no painel."
 )
@@ -80,10 +91,15 @@ def describe_reason(motivo: str | None) -> str:
 
 
 def describe_outcome(
-    outcome: Outcome | LeftAtOrigin, *, tipo: str | None, resumo: str | None
+    outcome: Outcome | LeftAtOrigin,
+    *,
+    tipo: str | None,
+    resumo: str | None,
+    effects_enabled: bool = True,
 ) -> str:
     """One reply for the operator: what happened and where the file is."""
     head = " · ".join(part for part in (tipo, short(resumo, MAX_RESUMO)) if part)
+    where = "O arquivo ficou onde estava." if effects_enabled else "Nada foi gravado no servidor."
     match outcome:
         case Archived(simulated=True, destino=destino):
             return f"Simulado (efeitos de arquivo desligados): iria para {destino}." + (
@@ -100,12 +116,14 @@ def describe_outcome(
             where = f" em {caminho}" if caminho else ""
             return f"Este arquivo já está no acervo ({estado}){where}. Nada foi feito."
         case NotSupported(motivo=motivo, estado=estado):
-            return f"Não processado ({estado}): {motivo}. O arquivo ficou onde estava."
+            return f"Não processado ({estado}): {motivo}. {where}"
         case Failed(motivo=motivo):
-            return (
-                f"Falhou: {motivo}. O arquivo ficou na quarentena; "
-                "o administrador pode reprocessar."
+            tail = (
+                "O arquivo ficou na quarentena; o administrador pode reprocessar."
+                if effects_enabled
+                else "Nada foi gravado no servidor."
             )
+            return f"Falhou: {motivo}. {tail}"
         case LeftAtOrigin(case_id=case_id):
             return f"Caso {case_id}: o arquivo ficou na origem."
     return str(outcome)

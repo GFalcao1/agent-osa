@@ -14,7 +14,6 @@ from osa.db.audit import RESULT_DENIED
 from osa.domain.document import FileClass
 from osa.domain.errors import DomainError, SensitiveFile
 from osa.extract.classify import class_by_name
-from osa.extract.model import DEFAULT_SENSITIVE_EXTENSIONS
 from osa.telegram import texts
 from osa.telegram.auth import identify
 from osa.telegram.handlers import owners as owners_dialog
@@ -40,7 +39,7 @@ def handle_document(ctx: BotContext, msg: IncomingDocument) -> None:
     actor = identify(ctx, msg.from_id, msg.chat_id, kind="document")
     if actor is None:
         return
-    if class_by_name(msg.file_name, DEFAULT_SENSITIVE_EXTENSIONS) is FileClass.SENSITIVE:
+    if class_by_name(msg.file_name, ctx.sensitive_extensions) is FileClass.SENSITIVE:
         ctx.courier.audit(
             ator=actor.actor,
             acao="telegram.upload",
@@ -62,7 +61,10 @@ def handle_document(ctx: BotContext, msg: IncomingDocument) -> None:
         return
     pending = PendingUpload(msg.chat_id, actor, msg.file_id, msg.file_name, msg.file_size)
     with ctx.state.lock:
+        previous = ctx.state.uploads.get((msg.chat_id, actor.user_id))
         ctx.state.uploads[(msg.chat_id, actor.user_id)] = pending
+    if previous is not None:
+        ctx.bot.send(msg.chat_id, texts.PREVIOUS_UPLOAD_DROPPED)
     caption = (msg.caption or "").strip()
     if not caption:
         ctx.bot.send(msg.chat_id, texts.ASK_OWNER)
@@ -115,6 +117,10 @@ def handle_upload_callback(ctx: BotContext, cb: Callback) -> None:
     if action == "new":
         ctx.bot.answer(cb.callback_id)
         name = pending.owner_text or ""
+        problem = ctx.courier.owner_name_problem(name)
+        if problem is not None:
+            ctx.bot.edit(cb.chat_id, cb.message_id, texts.OWNER_NAME_INVALID.format(erro=problem))
+            return  # the upload keeps waiting: the operator writes another name
         token = owners_dialog.request_owner(ctx, name, actor, cb.chat_id, pending)
         if token is None:
             ctx.bot.edit(cb.chat_id, cb.message_id, texts.OWNER_REQUEST_NO_ADMIN)
@@ -158,10 +164,19 @@ def run_upload(ctx: BotContext, pending: PendingUpload, owner: OwnerInfo) -> Non
     except DomainError as error:
         ctx.bot.send(pending.chat_id, f"Não foi possível processar: {error}")
         return
+    except OSError:  # the holding copy or the quarantine could not be written
+        log.exception("telegram.upload_failed")
+        ctx.bot.send(pending.chat_id, texts.UPLOAD_FAILED)
+        return
     document = ctx.courier.document(outcome.document_id)
     ctx.bot.send(
         pending.chat_id,
-        texts.describe_outcome(outcome, tipo=document.tipo_documental, resumo=document.resumo),
+        texts.describe_outcome(
+            outcome,
+            tipo=document.tipo_documental,
+            resumo=document.resumo,
+            effects_enabled=ctx.effects_enabled,
+        ),
     )
     if isinstance(outcome, Reviewed):
         review_dialog.post_case(

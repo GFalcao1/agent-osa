@@ -18,6 +18,7 @@ from osa.courier.pipeline import Archived, Failed, Outcome
 from osa.courier.review import LeftAtOrigin
 from osa.courier.undo import UndoResult
 from osa.domain.user import Role
+from osa.extract.model import DEFAULT_SENSITIVE_EXTENSIONS
 
 # --- incoming events ---------------------------------------------------------------------
 
@@ -183,6 +184,10 @@ class CourierPort(Protocol):
 
     def resolve_owner(self, text: str) -> OwnerInfo | None: ...
 
+    def owner_name_problem(self, text: str) -> str | None:
+        """Why the registry would refuse ``text`` as a new owner's name; ``None`` if fine."""
+        ...
+
     def suggest_owners(self, text: str, limit: int = 5) -> Sequence[OwnerInfo]: ...
 
     def owners(self) -> Sequence[OwnerInfo]: ...
@@ -265,6 +270,12 @@ class BotState:
         self.uploads: dict[tuple[int, int], PendingUpload] = {}
         self.owner_requests: dict[str, PendingOwnerRequest] = {}
         self.drafts: dict[int, ReviewDraft] = {}
+        self._case_locks: dict[int, threading.Lock] = {}
+
+    def case_lock(self, case_id: int) -> threading.Lock:
+        """One lock per case: two decisions on the same case never run at the same time."""
+        with self.lock:
+            return self._case_locks.setdefault(case_id, threading.Lock())
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,3 +288,4 @@ class BotContext:
     reviewers_chat_id: int | None
     effects_enabled: bool
     download_limit: int = 20 * 1024 * 1024  # the Bot API download limit
+    sensitive_extensions: Sequence[str] = DEFAULT_SENSITIVE_EXTENSIONS  # the installation's list

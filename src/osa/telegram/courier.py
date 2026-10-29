@@ -10,6 +10,7 @@ anything, and never inside a root.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import os
 import shutil
 import tempfile
@@ -24,20 +25,20 @@ from osa.admin import services
 from osa.core.settings import Settings
 from osa.courier import owners as courier_owners
 from osa.courier import review as courier_review
-from osa.courier.intake import Intake, stage_upload
+from osa.courier.intake import Intake, quarantine_suffix, stage_upload
 from osa.courier.owners import OwnerRequest
-from osa.courier.pipeline import Archived, Failed, Outcome, process
+from osa.courier.pipeline import ALVO, Archived, Duplicate, Failed, Outcome, process
 from osa.courier.ports import ClassifyPort, ContentPort, FsPort, LocalContent, LocalFs
 from osa.courier.review import LeftAtOrigin
 from osa.courier.store import SqlStore
 from osa.courier.undo import UndoResult, undo_operation
-from osa.db.audit import record_event
+from osa.db.audit import RESULT_DENIED, record_event
 from osa.db.models import Department, Owner, ReviewCase, User
-from osa.domain.document import Origin
+from osa.domain.document import DocumentState, Origin
+from osa.domain.errors import Conflict
 from osa.domain.owner import normalize_text
 from osa.domain.user import Role
 from osa.extract.model import ExtractLimits
-from osa.fs.names import nfc
 from osa.telegram.ports import (
     Actor,
     CaseInfo,
@@ -68,6 +69,8 @@ class RealCourier:
             content if content is not None else LocalContent(ExtractLimits.from_settings(settings))
         )
         self._llm = llm
+        self._llm_fixed = llm is not None
+        self._llm_config: tuple[str, str | None] | None = None
         self._llm_lock = threading.Lock()
 
     # --- registry -----------------------------------------------------------------------
@@ -109,6 +112,13 @@ class RealCourier:
         with self._sessions() as session:
             owner = courier_owners.resolve_declared_owner(session, text)
             return _owner(owner) if owner is not None else None
+
+    def owner_name_problem(self, text: str) -> str | None:
+        try:
+            services.check_owner_name(text)
+        except ValueError as error:
+            return str(error)
+        return None
 
     def suggest_owners(self, text: str, limit: int = 5) -> Sequence[OwnerInfo]:
         """The registered owners closest to what the operator wrote (names and aliases)."""
@@ -152,12 +162,18 @@ class RealCourier:
     # --- the courier --------------------------------------------------------------------
 
     def _provider(self, session: Session) -> ClassifyPort:
+        """The provider for the model configured now; rebuilt when the panel changes it."""
         with self._llm_lock:
-            if self._llm is None:
-                from osa.llm.provider import build_local_provider
+            if self._llm_fixed:
+                assert self._llm is not None
+                return self._llm
+            from osa.llm.provider import build_local_provider
 
-                config = services.effective_model_config(session, self.settings)
+            config = services.effective_model_config(session, self.settings)
+            key = (config.nome, config.digest)
+            if self._llm is None or key != self._llm_config:
                 self._llm = build_local_provider(self.settings, config)
+                self._llm_config = key
             return self._llm
 
     def process_upload(self, data: bytes, name: str, *, owner_id: int, sender: Actor) -> Outcome:
@@ -165,6 +181,27 @@ class RealCourier:
         with self._sessions() as session:
             store = SqlStore(session)
             owner = store.owner(owner_id)
+            if not owner.ativo:
+                raise Conflict("dono inativo")
+            # A duplicate is known from the bytes alone: nothing is staged for it (SPEC §5-A
+            # step 3), so the quarantine never keeps a copy no record points at.
+            sha256 = hashlib.sha256(data).hexdigest()
+            existing = store.document_by_sha256(sha256)
+            if existing is not None and existing.estado in (
+                DocumentState.ARQUIVADO.value,
+                DocumentState.EM_REVISAO.value,
+            ):
+                store.audit(
+                    ator=sender.actor,
+                    acao="document.duplicate",
+                    alvo_tipo=ALVO,
+                    alvo_id=existing.id,
+                    sha256=sha256,
+                    resultado=RESULT_DENIED,
+                    detalhes={"estado": existing.estado, "origem": Origin.TELEGRAM.value},
+                )
+                store.commit()
+                return Duplicate(existing.id, existing.estado, existing.caminho)
             root = courier_owners.upload_root(session, owner, fs=self.fs)
             llm = self._provider(session)
             holding: Path | None = None
@@ -207,7 +244,9 @@ class RealCourier:
         base = self.settings.quarantine_dir or Path(tempfile.gettempdir()) / "osa-uploads"
         folder = base / uuid.uuid4().hex
         folder.mkdir(parents=True, mode=0o700)
-        path = folder / nfc(name).replace("/", "_").replace("\\", "_")
+        # Named by an id plus the original's extension, like the quarantine: the class sniff
+        # needs the extension and nothing else of the name, which Telegram does not validate.
+        path = folder / f"{uuid.uuid4().hex}{quarantine_suffix(name)}"
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
