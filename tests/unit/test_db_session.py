@@ -33,6 +33,10 @@ MIGRATION_0002 = (
     / "src/osa/db/migrations/versions/0002_installation_settings.py"
 )
 
+MIGRATION_0003 = (
+    Path(__file__).resolve().parents[2] / "src/osa/db/migrations/versions/0003_courier.py"
+)
+
 FICTIONAL_PASSWORD = "fictional-pw-123"
 URL = f"postgresql://osa:{FICTIONAL_PASSWORD}@db.example.invalid:5432/osa_fictional"
 
@@ -158,8 +162,12 @@ def _load_0002() -> ModuleType:
     return _load_migration(MIGRATION_0002, "migration_0002")
 
 
+def _load_0003() -> ModuleType:
+    return _load_migration(MIGRATION_0003, "migration_0003")
+
+
 def _migration_ddl() -> str:
-    """DDL of 0001 and 0002 with a bare context: no target_metadata, no naming convention."""
+    """DDL of 0001 to 0003 with a bare context: no target_metadata, no naming convention."""
     buffer = io.StringIO()
     context = MigrationContext.configure(
         dialect_name="postgresql", opts={"as_sql": True, "output_buffer": buffer}
@@ -167,14 +175,29 @@ def _migration_ddl() -> str:
     with Operations.context(context):
         _load_0001().upgrade()
         _load_0002().upgrade()
+        _load_0003().upgrade()
     return buffer.getvalue()
 
 
+_ADDED = re.compile(r"^ALTER TABLE \w+ ADD (CONSTRAINT .*)$")
+
+
 def _clauses(ddl: str) -> set[str]:
-    """Constraint and index clauses, one per line, without trailing commas."""
+    """Constraint and index clauses, one per line, without trailing commas.
+
+    A constraint added by a later migration (``ALTER TABLE ... ADD CONSTRAINT``) is read
+    as the clause it adds, so it compares with the inline clause of ``CREATE TABLE``.
+    """
     lines = (line.strip().rstrip(",").rstrip(";").strip() for line in ddl.splitlines())
     keep = ("CONSTRAINT ", "PRIMARY KEY", "UNIQUE", "FOREIGN KEY", "CHECK", "CREATE INDEX")
-    return {line for line in lines if line.startswith(keep)}
+    found = set()
+    for line in lines:
+        added = _ADDED.match(line)
+        if added:
+            line = added.group(1)
+        if line.startswith(keep):
+            found.add(line)
+    return found
 
 
 def _models_ddl() -> str:
@@ -197,7 +220,7 @@ def test_migration_names_every_constraint_without_env_naming_convention() -> Non
 
 
 def test_migration_constraints_and_indexes_match_models() -> None:
-    """Names, CHECK expressions and indexes of 0001 + 0002 equal what the models declare."""
+    """Names, CHECK expressions and indexes of 0001 to 0003 equal what the models declare."""
     assert _clauses(_migration_ddl()) == _clauses(_models_ddl())
 
 
@@ -211,3 +234,25 @@ def test_migration_vocabularies_match_domain_enums() -> None:
     assert set(migration.REVIEW_STATES) == {s.value for s in ReviewState}
     assert migration.ALIAS_PATTERN == ALIAS_PATTERN
     assert migration.CNPJ_PATTERN == CNPJ_PATTERN
+    assert _load_0003().SHA256 == migration.SHA256
+
+
+def test_migration_0003_adds_the_courier_columns_and_nothing_else() -> None:
+    """The description of a department and the identity of an archive operation."""
+    buffer = io.StringIO()
+    context = MigrationContext.configure(
+        dialect_name="postgresql", opts={"as_sql": True, "output_buffer": buffer}
+    )
+    with Operations.context(context):
+        _load_0003().upgrade()
+    ddl = buffer.getvalue()
+    statements = [line.strip() for line in ddl.splitlines() if line.strip().startswith("ALTER")]
+    assert statements == [
+        "ALTER TABLE departments ADD COLUMN descricao TEXT;",
+        "ALTER TABLE archive_operations ADD COLUMN root_id INTEGER NOT NULL;",
+        "ALTER TABLE archive_operations ADD COLUMN sha256 VARCHAR(64) NOT NULL;",
+        "ALTER TABLE archive_operations ADD CONSTRAINT fk_archive_operations_root_id_roots "
+        "FOREIGN KEY(root_id) REFERENCES roots (id);",
+        "ALTER TABLE archive_operations ADD CONSTRAINT ck_archive_operations_sha256_hex "
+        "CHECK (sha256 ~ '^[0-9a-f]{64}$');",
+    ]

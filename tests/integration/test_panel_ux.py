@@ -841,7 +841,7 @@ def test_department_and_user_rows_are_real_columns_tied_to_one_row_form(
         'data-track="row">'
     )
     assert form in departments
-    for name in ("nome", "pasta", "usa_ano"):
+    for name in ("nome", "pasta", "descricao", "usa_ano"):
         assert re.search(
             rf'<input type="(?:text|checkbox)" name="{name}" form="dep-{ids["department"]}"',
             departments,
@@ -852,7 +852,8 @@ def test_department_and_user_rows_are_real_columns_tied_to_one_row_form(
     )
     assert save
     assert (
-        '<th scope="col">Nome</th><th scope="col">Pasta</th><th scope="col">Ano</th>' in departments
+        '<th scope="col">Nome</th><th scope="col">Pasta</th><th scope="col">Descrição</th>'
+        '<th scope="col">Ano</th>' in departments
     )
     assert (
         f'id="usr-{ids["user"]}"' in users

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -61,3 +63,40 @@ def test_config_check_never_prints_url_credentials(
     assert result.exit_code == 1
     assert "ollama_base_url" in result.output
     assert "fictional-secret" not in result.output
+
+
+# --- osa process / osa undo (sem banco: recusas de uma linha, nunca um traceback) ----------
+
+
+def test_process_without_database_fails_in_one_line(tmp_path: Path) -> None:
+    file = tmp_path / "nota.pdf"
+    file.write_bytes(b"%PDF-1.4 ficticio")
+
+    result = runner.invoke(app, ["process", str(file), "--dono", "alfa"])
+
+    assert result.exit_code == 1
+    assert "OSA_DATABASE_URL" in result.output and "Traceback" not in result.output
+
+
+def test_process_with_a_missing_file_fails_in_one_line(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["process", str(tmp_path / "nao-existe.pdf"), "--dono", "alfa"])
+
+    assert result.exit_code == 1
+    assert "arquivo não existe" in result.output and "Traceback" not in result.output
+
+
+def test_process_refuses_an_unknown_origin(tmp_path: Path) -> None:
+    file = tmp_path / "nota.pdf"
+    file.write_bytes(b"%PDF-1.4 ficticio")
+
+    result = runner.invoke(app, ["process", str(file), "--dono", "alfa", "--origem", "email"])
+
+    assert result.exit_code == 1
+    assert "origem deve ser" in result.output
+
+
+def test_undo_without_database_fails_in_one_line() -> None:
+    result = runner.invoke(app, ["undo", "7"])
+
+    assert result.exit_code == 1
+    assert "OSA_DATABASE_URL" in result.output and "Traceback" not in result.output

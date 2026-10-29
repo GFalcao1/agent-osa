@@ -55,12 +55,18 @@ def create_department(
     nome: Text = "",
     pasta: Text = "",
     usa_ano: Flag = None,
+    descricao: Text = "",
     session: Session = Depends(get_session),
 ) -> Response:
     return mutate(
         session,
         lambda: services.create_department(
-            session, nome=nome, pasta=pasta or None, usa_ano=checked(usa_ano), actor=ACTOR
+            session,
+            nome=nome,
+            pasta=pasta or None,
+            usa_ano=checked(usa_ano),
+            descricao=descricao,
+            actor=ACTOR,
         ),
         done="/departments",
         fail=_fail(request, session),
@@ -75,12 +81,19 @@ def update_department(
     nome: Text = "",
     pasta: Text = "",
     usa_ano: Flag = None,
+    descricao: Text = "",
     session: Session = Depends(get_session),
 ) -> Response:
     return mutate(
         session,
         lambda: services.update_department(
-            session, department_id, nome=nome, pasta=pasta, usa_ano=checked(usa_ano), actor=ACTOR
+            session,
+            department_id,
+            nome=nome,
+            pasta=pasta,
+            usa_ano=checked(usa_ano),
+            descricao=descricao,
+            actor=ACTOR,
         ),
         done="/departments",
         fail=_fail(request, session),

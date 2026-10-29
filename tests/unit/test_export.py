@@ -38,6 +38,7 @@ departamentos:
   - nome: Fiscal
     pasta: Fiscal
     usa_ano: true
+    descricao: Notas fiscais e guias
     ativo: true
   - nome: Pessoal
     pasta: Pessoal
@@ -81,6 +82,14 @@ def test_parse_valid_document() -> None:
     assert registry.donos[0].aliases == ["alfa", "alfa ltda"]
     assert registry.usuarios[1].departamento == "Fiscal"
     assert registry.modelo is not None and registry.modelo.provedor_externo_ativo is False
+
+
+def test_department_description_is_optional_and_round_trips() -> None:
+    registry = _registry()
+
+    assert registry.departamentos[0].descricao == "Notas fiscais e guias"
+    assert registry.departamentos[1].descricao is None
+    assert "descricao: Notas fiscais e guias" in export.dump_registry_yaml(registry)
 
 
 def test_empty_sections_are_optional() -> None:

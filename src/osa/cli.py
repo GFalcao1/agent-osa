@@ -276,5 +276,136 @@ def eval_command(
     raise typer.Exit(comparison.exit_code)
 
 
+def _origin(value: str) -> Any:
+    from osa.domain.document import Origin
+
+    try:
+        return Origin(value)
+    except ValueError:
+        _fail("origem deve ser telegram, watched ou scan")
+
+
+def _describe_outcome(outcome: Any) -> str:
+    from osa.courier import pipeline
+
+    match outcome:
+        case pipeline.Archived(simulated=True, destino=destino):
+            return f"simulado (efeitos desligados): destino previsto {destino}"
+        case pipeline.Archived(destino=destino, operation_id=operation_id):
+            return f"arquivado em {destino} (operação {operation_id})"
+        case pipeline.Reviewed(case_id=case_id, motivo=motivo):
+            return f"em revisão (caso {case_id}): {motivo}"
+        case pipeline.Duplicate(caminho=caminho, estado=estado):
+            return f"duplicata: já consta no índice ({estado}) em {caminho or 'origem'}"
+        case pipeline.NotSupported(motivo=motivo):
+            return f"não suportado: {motivo}"
+        case pipeline.Failed(motivo=motivo):
+            return f"FALHOU: {motivo}"
+    return str(outcome)
+
+
+@app.command("process")
+def process_command(
+    file: Path = typer.Argument(..., help="File to process (fictitious data in development)."),
+    dono: str = typer.Option(..., "--dono", help="Declared owner: a registered alias or CNPJ."),
+    origem: str = typer.Option("telegram", "--origem", help="telegram, watched or scan."),
+) -> None:
+    """Run the courier on one file: quarantine, hash, extraction, envelope, decision, archive.
+
+    With OSA_ENABLE_FILE_EFFECTS=true the file is copied to the quarantine of the owner's
+    root and archived by rename; otherwise everything is decided and recorded as simulated.
+    Exit 0 for any decided outcome, 1 for FALHOU, a refused file or a configuration error.
+    """
+    from osa.admin import services
+    from osa.courier import owners, pipeline
+    from osa.courier.intake import Intake, stage_upload
+    from osa.courier.ports import LocalContent, LocalFs
+    from osa.courier.store import SqlStore
+    from osa.db.session import DatabaseNotConfigured
+    from osa.domain.errors import DomainError
+    from osa.extract.model import ExtractLimits
+    from osa.llm.provider import build_local_provider
+
+    settings = _settings()
+    origin = _origin(origem)
+    fs = LocalFs()
+    content = LocalContent(ExtractLimits.from_settings(settings))
+    try:
+        source = file.resolve(strict=True)
+        if file.is_symlink() or not source.is_file():
+            _fail("arquivo não existe ou não é um arquivo comum")
+        with _session_factory()() as session:
+            owner = owners.resolve_declared_owner(session, dono)
+            if owner is None:
+                _fail("dono não encontrado no cadastro (alias ou CNPJ exato)")
+            root = owners.upload_root(session, owner, fs=fs)
+            config = services.effective_model_config(session, settings)
+            if settings.enable_file_effects:
+                with open(source, "rb") as handle:
+                    staged = stage_upload(
+                        Path(root.caminho),
+                        handle.read(),
+                        source.name,
+                        sensitive_extensions=settings.sensitive_extensions,
+                        effects_enabled=True,
+                    )
+                typer.echo(f"gravado na quarentena: {staged.relative_path}", err=True)
+                location, relative = staged.path, staged.relative_path
+            else:
+                location, relative = source, None
+            intake = Intake(
+                root.id, location, relative, source.name, origin, declared_owner=owner.id
+            )
+            with build_local_provider(settings, config) as llm:
+                outcome = pipeline.process(
+                    intake,
+                    store=SqlStore(session),
+                    fs=fs,
+                    content=content,
+                    llm=llm,
+                    actor="cli:process",
+                    effects_enabled=settings.enable_file_effects,
+                )
+    except (DatabaseNotConfigured, DomainError, ValueError) as error:
+        _fail(str(error))
+    except OSError:
+        _fail("arquivo não existe ou não pode ser lido")
+    except OperationalError:
+        _fail("banco de dados inacessível: confira OSA_DATABASE_URL e se o PostgreSQL está de pé")
+    except SQLAlchemyError:
+        _fail("erro de banco de dados ou esquema não migrado: rode `alembic upgrade head`")
+    typer.echo(f"documento {outcome.document_id} [{outcome.estado}]: {_describe_outcome(outcome)}")
+    if isinstance(outcome, pipeline.Failed):
+        raise typer.Exit(1)
+
+
+@app.command("undo")
+def undo_command(
+    operation_id: int = typer.Argument(..., help="Id of the archive operation to undo."),
+) -> None:
+    """Move an archived file back to where it came from (checked by its sha256)."""
+    from osa.courier.ports import LocalFs
+    from osa.courier.store import SqlStore
+    from osa.courier.undo import undo_operation
+
+    settings = _settings()
+    result = _in_transaction(
+        lambda session: undo_operation(
+            operation_id,
+            store=SqlStore(session),
+            fs=LocalFs(),
+            actor="cli:undo",
+            effects_enabled=settings.enable_file_effects,
+        )
+    )
+    if result.simulated:
+        typer.echo(f"simulado (efeitos desligados): o arquivo voltaria para {result.destino}")
+    else:
+        typer.echo(
+            f"desfeito: documento {result.document_id} de volta em {result.destino} "
+            f"(operação {result.undo_operation_id})"
+        )
+
+
 def main() -> None:
     app()

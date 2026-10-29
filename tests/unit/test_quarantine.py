@@ -171,3 +171,33 @@ def test_archive_never_accepts_the_quarantine_as_destination(root: Path) -> None
         with pytest.raises(CrossRoot):
             archive(root, "Alfa/a.pdf", destination, effects_enabled=True)
     assert list((root / QUARANTINE_DIR).iterdir()) == []
+
+
+# --- sufixo (extensão normalizada do original) -------------------------------------------
+
+
+def test_suffix_keeps_the_extension_after_the_exclusive_id(root: Path) -> None:
+    ensure_quarantine(root, effects_enabled=True)
+    with new_quarantine_file(root, suffix=".pdf", effects_enabled=True) as file:
+        pass
+    name = file.rel.rsplit("/", 1)[1]
+    assert name.endswith(".pdf") and len(name) == 36
+    assert int(name[:-4], 16) >= 0
+    assert (root / file.rel).is_file()
+
+
+def test_suffix_is_predicted_when_simulated(root: Path) -> None:
+    ensure_quarantine(root, effects_enabled=True)
+    with new_quarantine_file(root, suffix=".docx", effects_enabled=False) as file:
+        assert file.simulated and file.fd is None
+    assert file.rel.endswith(".docx")
+    assert not (root / file.rel).exists()
+
+
+@pytest.mark.parametrize("suffix", ["pdf", ".PDF", ".", ".a/b", ".tar.gz", "." + "a" * 17, ".ção"])
+def test_other_suffixes_are_refused_before_anything_is_created(root: Path, suffix: str) -> None:
+    ensure_quarantine(root, effects_enabled=True)
+    with pytest.raises(UnsafePath, match="sufixo"):
+        with new_quarantine_file(root, suffix=suffix, effects_enabled=True):
+            pass
+    assert list((root / QUARANTINE_DIR).iterdir()) == []

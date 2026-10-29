@@ -33,6 +33,8 @@ from osa.db.models import (
 from osa.domain.errors import AccessDenied, Conflict, NotFound, UnsafePath
 from osa.domain.owner import normalize_alias, normalize_cnpj
 from osa.domain.user import Role
+from osa.llm.envelopes import MAX_DESCRIPTION_LEN, validate_departments
+from osa.llm.provider import InvalidDepartments
 
 # --- folder names -------------------------------------------------------------------
 
@@ -155,6 +157,19 @@ def validate_root_path(raw: str, *, is_mount_point: MountPredicate) -> Path:
     resolved = _checked_root_path(raw, is_mount_point=is_mount_point)
     probe_directory_writable(resolved)
     return resolved
+
+
+def _open_as_the_courier_would(path: Path) -> None:
+    """Refuse a root the archiving layer would refuse later (``osa.fs.roots.open_root``).
+
+    Same rules as every effect: canonical path, no link in any component, never ``/``. The
+    descriptor is closed at once; nothing is written. Imported here because the filesystem
+    package is POSIX-only and the registry must stay importable without it.
+    """
+    from osa.fs.roots import open_root
+
+    with open_root(path):
+        pass
 
 
 def _checked_root_path(raw: str, *, is_mount_point: MountPredicate) -> Path:
@@ -456,6 +471,7 @@ def create_root(
     description = _description(descricao)
     try:
         path = _checked_root_path(caminho, is_mount_point=is_mount_point)
+        _open_as_the_courier_would(path)
     except UnsafePath as error:
         _audit_refusal(session, actor, "root.create", "root", str(error))
         raise
@@ -545,10 +561,26 @@ def set_watched_folder_active(
 # --- departments (template) ---------------------------------------------------------
 
 
+def department_name(nome: str, others: Iterable[str] = ()) -> str:
+    """The NFC name, usable as the model's enum value and distinct from ``others``.
+
+    The same rule the prompt applies (``validate_departments``): letters or digits, at most
+    100 characters, no control characters, and unique ignoring case, accents and signs. The
+    registry refuses here what the classification would refuse for every document.
+    """
+    text = _nfc(_text(nome, "nome"))
+    try:
+        validate_departments([*others, text])
+    except InvalidDepartments:
+        raise ValueError("nome de departamento repetido ou inválido para o modelo") from None
+    return text
+
+
 def _department_collision(
     session: Session, nome: str, pasta: str, *, exclude_id: int | None = None
 ) -> None:
     name_key, folder = folder_key(nome), folder_key(pasta)
+    others: list[str] = []
     for other in session.scalars(select(Department)):
         if other.id == exclude_id:
             continue
@@ -556,6 +588,30 @@ def _department_collision(
             raise Conflict("já existe departamento com este nome")
         if folder_key(other.pasta) == folder:
             raise Conflict("pasta já em uso por outro departamento")
+        others.append(other.nome)
+    department_name(nome, others)
+
+
+def department_description(value: str | None) -> str | None:
+    """The description the registry stores, validated exactly as the prompt validates it.
+
+    Up to ``MAX_DESCRIPTION_LEN`` characters, and never a phrase aimed at the model (a
+    delimiter look-alike, an envelope, an imperative with a target): the administrator is
+    trusted, the description is data (ADR-0012, decision 7). Blank is no description.
+    """
+    text = _text(value, "descrição do departamento", required=False, limit=MAX_DESCRIPTION_LEN)
+    if not text:
+        return None
+    from osa.llm.prompts import checked_description
+    from osa.llm.provider import DepartmentDescriptionRejected
+
+    try:
+        checked_description(text)
+    except DepartmentDescriptionRejected:
+        raise ValueError(
+            "descrição parece instrução ao modelo; descreva só o que o departamento arquiva"
+        ) from None
+    return text
 
 
 def create_department(
@@ -564,17 +620,25 @@ def create_department(
     nome: str,
     pasta: str | None = None,
     usa_ano: bool = False,
+    descricao: str | None = None,
     actor: str,
 ) -> Department:
     nome = _text(nome, "nome")
+    description = department_description(descricao)
     folder = validate_folder_name(pasta) if pasta and pasta.strip() else derive_folder_name(nome)
+    nome = department_name(nome)
     _lock(session, _FOLDER_LOCK)
     _department_collision(session, nome, folder)
     position = session.scalar(select(func.coalesce(func.max(Department.ordem), 0))) or 0
-    department = Department(nome=nome, pasta=folder, ordem=position + 1, usa_ano=usa_ano)
+    department = Department(
+        nome=nome, pasta=folder, ordem=position + 1, usa_ano=usa_ano, descricao=description
+    )
     session.add(department)
     session.flush()
-    _audit(session, actor, "department.create", "department", department.id, usa_ano=usa_ano)
+    _audit(
+        session, actor, "department.create", "department", department.id,
+        usa_ano=usa_ano, descricao=description is not None,
+    )  # fmt: skip
     return department
 
 
@@ -585,11 +649,14 @@ def update_department(
     nome: str,
     pasta: str,
     usa_ano: bool,
+    descricao: str | None = None,
     actor: str,
 ) -> Change[Department]:
     department = _fetch(session, Department, department_id, "departamento")
     nome = _text(nome, "nome")
+    description = department_description(descricao)
     folder = validate_folder_name(pasta)
+    nome = department_name(nome)
     _lock(session, _FOLDER_LOCK)
     _department_collision(session, nome, folder, exclude_id=department.id)
     changed: list[str] = []
@@ -604,6 +671,9 @@ def update_department(
     if usa_ano != department.usa_ano:
         department.usa_ano = usa_ano
         changed.append("usa_ano")
+    if description != department.descricao:
+        department.descricao = description
+        changed.append("descricao")
     session.flush()
     details: dict[str, object] = {"campos": changed}
     if warnings:

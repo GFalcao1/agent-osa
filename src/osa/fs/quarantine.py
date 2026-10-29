@@ -9,6 +9,7 @@ criado e o resultado é simulado, previsto com o estado observado.
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
@@ -16,13 +17,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from osa.domain.errors import Conflict, NotFound
+from osa.domain.errors import Conflict, NotFound, UnsafePath
 from osa.fs.errors import DestinationMissing
 from osa.fs.names import QUARANTINE_DIR
 from osa.fs.roots import find_entry, open_beneath, open_root
 
 _MAX_ID_ATTEMPTS: Final = 16
 _FILE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+#: Sufixo opcional do nome na quarentena: a extensão normalizada do original (``.pdf``), para
+#: a extração decidir a classe pelo nome como em qualquer outro lugar. Nunca uma classe
+#: sensível (o correio recusa antes) e nunca outra coisa além de uma extensão simples.
+_SUFFIX: Final = re.compile(r"(\.[0-9a-z]{1,16})?")
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,13 +72,19 @@ def ensure_quarantine(root: Path, *, effects_enabled: bool = False) -> Quarantin
 
 
 @contextmanager
-def new_quarantine_file(root: Path, *, effects_enabled: bool = False) -> Iterator[QuarantineFile]:
+def new_quarantine_file(
+    root: Path, *, suffix: str = "", effects_enabled: bool = False
+) -> Iterator[QuarantineFile]:
     """Cria na quarentena um arquivo de nome exclusivo (``uuid4`` hex, ``O_EXCL``, ``0o600``).
 
     A pasta tem de existir (``DestinationMissing``; esta função não a cria). O nome não depende
-    do nome original do documento, que fica no banco. Desligado, não cria nada e devolve um
-    resultado simulado com ``fd=None``. O descritor é fechado na saída; nunca apaga.
+    do nome original do documento, que fica no banco; só a extensão normalizada pode vir em
+    ``suffix`` (``.pdf``), para a extração reconhecer a classe pelo nome. Desligado, não cria
+    nada e devolve um resultado simulado com ``fd=None``. O descritor é fechado na saída;
+    nunca apaga.
     """
+    if not _SUFFIX.fullmatch(suffix):
+        raise UnsafePath("sufixo de quarentena inválido")
     with ExitStack() as stack:
         root_fd = stack.enter_context(open_root(Path(root)))
         try:
@@ -82,10 +93,10 @@ def new_quarantine_file(root: Path, *, effects_enabled: bool = False) -> Iterato
             raise DestinationMissing("quarentena não existe; ensure_quarantine a cria") from None
         folder = directory.parts[0]
         if not effects_enabled:
-            yield QuarantineFile(None, f"{folder}/{_new_id()}", simulated=True)
+            yield QuarantineFile(None, f"{folder}/{_new_id()}{suffix}", simulated=True)
             return
         for _ in range(_MAX_ID_ATTEMPTS):
-            name = _new_id()
+            name = f"{_new_id()}{suffix}"
             try:
                 fd = os.open(name, _FILE_FLAGS, 0o600, dir_fd=directory.fd)
             except FileExistsError:
