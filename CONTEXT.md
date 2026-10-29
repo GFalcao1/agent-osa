@@ -120,8 +120,16 @@ Pasta `.osa-quarentena` dentro de cada raiz onde o upload é gravado, com nome e
 _Evitar_: inbox, área temporária, pasta de entrada
 
 **Revisão**:
-Caso que o correio não arquivou sozinho, entregue ao revisor com botões para decidir dono, departamento ou deixar na origem.
+Caso que o correio não arquivou sozinho, entregue ao revisor com botões para decidir dono, departamento ou deixar na origem. A decisão passa pelo correio (`osa.courier.review`): arquivar grava a operação com `modo = review` e fecha o caso como `decidido`; deixar na origem fecha como `origem` com o documento `NA_ORIGEM`.
 _Evitar_: aprovação, plano
+
+**Rascunho de revisão**:
+Dono e departamento já escolhidos nos botões de um caso, guardados na memória do bot até "Arquivar"; some com o reinício do bot e o revisor escolhe de novo. Não é registro.
+_Evitar_: decisão parcial
+
+**Pasta de espera**:
+Pasta local, fora de qualquer raiz (`OSA_QUARANTINE_DIR` ou o temporário do sistema), onde o bot grava um download quando os efeitos de arquivo estão desligados, para o correio simular; a cópia é removida depois. Nunca é raiz, quarentena nem destino.
+_Evitar_: quarentena local
 
 **Simulado**:
 Resultado previsto de um efeito de filesystem que não aconteceu porque os efeitos estão desligados (`simulated=True`). Calculado com o estado observado no momento; não promete ser igual ao da execução real.
@@ -170,7 +178,7 @@ Posição do documento no índice: `DETECTADO`, `ESTAVEL`, `EXTRAIDO`, `CLASSIFI
 Como o documento entrou no índice: `telegram`, `watched` (pasta monitorada) ou `scan`.
 
 **Auditoria**:
-Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. A chamada ao provedor externo grava `tentativa` antes da rede (guardada como `failed` com `fase = tentativa`, porque a tabela não tem "pendente") e `ok` ou `failed` só depois dela. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`, `cli:process`, `cli:undo`). O correio grava um evento por etapa do documento (`document.detect`, `document.extract`, `document.classify`, `document.evidence` quando o texto contradiz ou confunde o dono, `archive.intent`, `document.archive`, `document.review`, `document.fail`, `document.unsupported`, `document.duplicate`, `archive.undo`) e pelo pedido de dono (`owner.request.confirm`, `owner.request.refuse`, `owner.tree`), sempre com o sha256 e nunca com texto: um motivo de revisão escrito pelo modelo entra como `motivo_livre`; a recusa de classe sensível (`document.intake`, `denied`) não tem documento nem hash. Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
+Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. A chamada ao provedor externo grava `tentativa` antes da rede (guardada como `failed` com `fase = tentativa`, porque a tabela não tem "pendente") e `ok` ou `failed` só depois dela. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`, `cli:process`, `cli:undo`); do bot: `telegram:<id do Telegram>`, inclusive para um id fora da allowlist (`telegram.unknown`, `denied`) e para o upload recusado antes do download (`telegram.upload`, `denied`). A decisão de revisão grava `review.decide` (ok, denied pelo share ou failed) ou `review.origin`, com `decidido_por`. O correio grava um evento por etapa do documento (`document.detect`, `document.extract`, `document.classify`, `document.evidence` quando o texto contradiz ou confunde o dono, `archive.intent`, `document.archive`, `document.review`, `document.fail`, `document.unsupported`, `document.duplicate`, `archive.undo`) e pelo pedido de dono (`owner.request.confirm`, `owner.request.refuse`, `owner.tree`), sempre com o sha256 e nunca com texto: um motivo de revisão escrito pelo modelo entra como `motivo_livre`; a recusa de classe sensível (`document.intake`, `denied`) não tem documento nem hash. Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
 
 ## Tabelas
 

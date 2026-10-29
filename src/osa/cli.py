@@ -407,5 +407,25 @@ def undo_command(
         )
 
 
+@app.command("bot")
+def bot_command() -> None:
+    """Run the Telegram bot (long polling) until stopped; same as the ``osa-bot`` entrypoint."""
+    from osa.core.logging import configure_logging
+    from osa.telegram.app import run
+
+    settings = _settings()
+    if settings.telegram_bot_token is None:
+        _fail("OSA_TELEGRAM_BOT_TOKEN não configurado")
+    if settings.database_url is None:
+        _fail("database is not configured: set OSA_DATABASE_URL")
+    configure_logging()
+    typer.echo(
+        "bot do Telegram em long polling "
+        f"(efeitos de arquivo {'ligados' if settings.enable_file_effects else 'desligados'})",
+        err=True,
+    )
+    run(settings)
+
+
 def main() -> None:
     app()

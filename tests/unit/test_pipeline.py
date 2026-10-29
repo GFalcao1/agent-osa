@@ -33,6 +33,7 @@ from osa.courier.intake import Intake
 from osa.courier.pipeline import (
     MOTIVO_LIVRE,
     Archived,
+    ArchiveRefused,
     ConfigurationError,
     Duplicate,
     Failed,
@@ -40,6 +41,7 @@ from osa.courier.pipeline import (
     Reviewed,
     process,
 )
+from osa.courier.review import LeftAtOrigin, decide_case, leave_at_origin, year_for
 from osa.courier.undo import undo_operation
 from osa.db.models import ArchiveOperation, Department, Document, Owner, ReviewCase, Root, User
 from osa.domain.document import FileClass, Origin
@@ -154,6 +156,30 @@ class MemoryStore:
 
     def operations_of(self, document_id: int) -> list[ArchiveOperation]:
         return [o for o in self.operations if o.document_id == document_id]
+
+    def review_case(self, case_id: int) -> ReviewCase:
+        found = next((c for c in self.reviews if c.id == case_id), None)
+        if found is None:
+            raise NotFound("caso de revisão não encontrado")
+        return found
+
+    def open_review_cases(self) -> list[ReviewCase]:
+        return [c for c in self.reviews if c.estado == "aberto"]
+
+    def user_by_telegram_id(self, telegram_id: int) -> User | None:
+        return next((u for u in self.users.values() if u.telegram_id == telegram_id), None)
+
+    def active_users(self) -> list[User]:
+        return [u for u in self.users.values() if u.ativo]
+
+    def active_owners(self) -> list[Owner]:
+        return [o for o in self.owners.values() if o.ativo]
+
+    def documents_by_state(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for d in self.documents.values():
+            counts[d.estado] = counts.get(d.estado, 0) + 1
+        return counts
 
     def audit(self, **event: Any) -> None:
         self.pending.append(event)
@@ -523,7 +549,8 @@ def test_the_decision_is_persisted_before_the_rename() -> None:
     intent = next(e for e in sc.store.committed if e["acao"] == "archive.intent")
     assert intent["detalhes"] == {
         "owner_id": 1, "departamento_id": 1, "ano": 2026,
-        "destino_dir": "Alfa Comércio/01 Fiscal/2026", "origem": STAGED, "evidencia": "declarado",
+        "destino_dir": "Alfa Comércio/01 Fiscal/2026", "origem": STAGED, "modo": "auto",
+        "evidencia": "declarado",
     }  # fmt: skip
 
 
@@ -989,3 +1016,127 @@ def test_undo_simulated_moves_nothing() -> None:
     assert result.simulated and result.undo_operation_id is None and result.destino == STAGED
     assert DEST in sc.fs.files and len(sc.store.operations) == 1
     assert sc.document.estado == "ARQUIVADO"
+
+
+# --- a reviewer's decision through the courier ---------------------------------------------
+
+
+def _review_scenario(**kwargs: Any) -> Scenario:
+    sc = scenario(env=envelope(revisao=True, motivo="texto_insuficiente"), **kwargs)
+    outcome = sc.run()
+    assert isinstance(outcome, Reviewed)
+    return sc
+
+
+def _decide(
+    sc: Scenario, *, owner_id: int = 2, department_id: int = 2, effects: bool = True
+) -> Any:
+    return decide_case(
+        1, owner_id=owner_id, department_id=department_id, store=sc.store, fs=sc.fs,
+        actor="telegram:2002", decided_by=2, effects_enabled=effects,
+    )  # fmt: skip
+
+
+def test_review_decision_archives_with_mode_review_and_closes_the_case() -> None:
+    sc = _review_scenario()
+
+    outcome = _decide(sc)
+
+    assert isinstance(outcome, Archived) and not outcome.simulated
+    assert outcome.destino == "Beta Serviços/02 Pessoal/nota.pdf"
+    assert outcome.destino in sc.fs.files and STAGED not in sc.fs.files
+    [operation] = sc.store.operations
+    assert (operation.modo, operation.ator, operation.origem) == ("review", "telegram:2002", STAGED)
+    case = sc.store.reviews[0]
+    assert (case.estado, case.decidido_por) == ("decidido", 2)
+    document = sc.document
+    assert (document.estado, document.owner_id, document.departamento_id) == ("ARQUIVADO", 2, 2)
+    decided = next(e for e in sc.store.committed if e["acao"] == "review.decide")
+    assert decided["resultado"] == "ok" and decided["detalhes"]["decidido_por"] == 2
+    assert decided["detalhes"]["ano_assumido"] is False
+    intent = [e for e in sc.store.committed if e["acao"] == "archive.intent"][-1]
+    assert (intent["detalhes"]["modo"], intent["detalhes"]["evidencia"]) == ("review", "revisor")
+
+
+def test_review_decision_uses_the_document_name_not_the_quarantine_id() -> None:
+    sc = _review_scenario(name="Contrato Alfa.pdf")
+    outcome = _decide(sc)
+    assert outcome.destino == "Beta Serviços/02 Pessoal/Contrato Alfa.pdf"
+
+
+def test_review_into_a_department_by_year_assumes_the_year_when_missing() -> None:
+    sc = _review_scenario()
+    sc.document.ano = None
+    outcome = _decide(sc, owner_id=1, department_id=1)
+    assert outcome.destino == "Alfa Comércio/01 Fiscal/2026/nota.pdf"  # from datas
+    decided = next(e for e in sc.store.committed if e["acao"] == "review.decide")
+    assert decided["detalhes"]["ano_assumido"] is True and decided["detalhes"]["ano"] == 2026
+
+
+def test_year_for_rules() -> None:
+    from datetime import date as _date
+
+    from osa.courier.decision import TemplateDepartment
+
+    fiscal = TemplateDepartment(1, "Fiscal", "01 Fiscal", True)
+    pessoal = TemplateDepartment(2, "Pessoal", "02 Pessoal", False)
+    document = Document(sha256="a" * 64, tags=[], datas=[])
+    assert year_for(document, pessoal) == (None, False)
+    document.ano = 2024
+    assert year_for(document, fiscal) == (2024, False)
+    document.ano = None
+    document.datas = [_date(2023, 5, 1), _date(2025, 1, 1)]
+    assert year_for(document, fiscal) == (2025, True)
+    document.datas = []
+    year, assumed = year_for(document, fiscal)
+    assert assumed and year == _date.today().year
+
+
+def test_review_decision_refused_by_the_share_keeps_the_case_open() -> None:
+    sc = _review_scenario()
+    sc.fs.archive_error = NameTooLong("nome de arquivo excede 255 unidades UTF-16")
+    with pytest.raises(ArchiveRefused):
+        _decide(sc)
+    assert sc.store.reviews[0].estado == "aberto"
+    assert sc.document.estado == "EM_REVISAO" and STAGED in sc.fs.files
+    assert sc.store.committed[-1]["acao"] == "review.decide"
+    assert sc.store.committed[-1]["resultado"] == "denied"
+
+
+def test_review_decision_is_refused_twice_and_for_unknown_targets() -> None:
+    sc = _review_scenario()
+    with pytest.raises(NotFound):
+        _decide(sc, owner_id=9)
+    with pytest.raises(NotFound):
+        _decide(sc, department_id=3)  # inactive department
+    _decide(sc)
+    with pytest.raises(Conflict, match="já decidido"):
+        _decide(sc)
+    with pytest.raises(Conflict, match="já decidido"):
+        leave_at_origin(1, store=sc.store, actor="telegram:1001", decided_by=1)
+
+
+def test_review_decision_simulated_predicts_and_keeps_the_case() -> None:
+    sc = _review_scenario(effects=False)
+    outcome = _decide(sc, effects=False)
+    assert isinstance(outcome, Archived) and outcome.simulated
+    assert sc.store.reviews[0].estado == "decidido" and STAGED in sc.fs.files
+
+
+def test_leave_at_origin_closes_the_case_without_moving() -> None:
+    sc = _review_scenario()
+    result = leave_at_origin(1, store=sc.store, actor="telegram:2002", decided_by=2)
+    assert result == LeftAtOrigin(1, "NA_ORIGEM", 1)
+    assert (sc.document.estado, sc.store.reviews[0].estado) == ("NA_ORIGEM", "origem")
+    assert sc.store.reviews[0].decidido_por == 2 and STAGED in sc.fs.files
+    assert sc.store.committed[-1]["acao"] == "review.origin"
+
+
+def test_document_only_simulated_cannot_be_decided() -> None:
+    sc = scenario(effects=False, relative=None, env=envelope(revisao=True, motivo="x"))
+    sc.run()
+    with pytest.raises(Conflict, match="simulado"):
+        decide_case(
+            1, owner_id=1, department_id=1, store=sc.store, fs=sc.fs, actor="t", decided_by=1,
+            effects_enabled=False,
+        )  # fmt: skip

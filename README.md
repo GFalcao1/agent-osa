@@ -14,12 +14,14 @@ monitorada recebe o mesmo tratamento para arquivos largados direto no servidor.
 
 Spec v1 aprovada em 2026-10-15 após revisão de direção. Em `main`: fundação,
 configuração e CLI (TASK-101), banco e auditoria (102), cadastro e painel local
-(103), filesystem seguro e arquivamento (104), extração por formato (105) e o
-provedor de modelo com envelopes e avaliação (106). A TASK-107 traz o correio:
-evidência de dono, decisão, pipeline da quarentena ao destino ou à revisão,
-desfazer e os comandos `osa process` e `osa undo`. O aceite de cada gate fica
-no registro de execução da própria task. A próxima da ordem é a TASK-108 (bot
-Telegram).
+(103), filesystem seguro e arquivamento (104), extração por formato (105), o
+provedor de modelo com envelopes e avaliação (106) e o correio (107: evidência
+de dono, decisão, pipeline da quarentena ao destino ou à revisão, desfazer e os
+comandos `osa process` e `osa undo`). A TASK-108 traz o bot do Telegram: upload
+com dono declarado, pedido de dono novo ao administrador, grupo de revisores
+com botões, `/status`, `/desfazer`, `/pendentes` e o lembrete diário, fechando
+a Entrega 1. O aceite de cada gate fica no registro de execução da própria
+task.
 
 `docs/` e `tasks/` estão no `.gitignore` nesta fase; existem localmente.
 
@@ -95,6 +97,11 @@ arquivo na quarentena da raiz do dono, extrai, pede o envelope ao modelo local
 e arquiva ou abre revisão (com `OSA_ENABLE_FILE_EFFECTS=false`, o padrão, só
 simula); `uv run osa undo <operação>` desfaz um arquivamento pelo id da
 operação. Só com documentos fictícios fora da homologação.
+
+O bot roda com `uv run osa bot` (ou o entrypoint `osa-bot`), com
+`OSA_TELEGRAM_BOT_TOKEN`, `OSA_DATABASE_URL` e, para o grupo de revisores,
+`OSA_TELEGRAM_REVIEWERS_CHAT_ID`. Só usuários da allowlist (tabela `users`)
+recebem resposta. Com efeitos desligados o bot só simula o arquivamento.
 
 ## Ícones, fontes e animações do painel
 
