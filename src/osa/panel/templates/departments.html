@@ -8,7 +8,7 @@
   <h1>Template de departamentos</h1>
   <p class="lead">A mesma lista de pastas para todo dono, em ordem. Mudar o nome ou a pasta aqui não renomeia pastas que já existem no servidor.</p>
 </header>
-{% call help_block("template") %}Esta lista define as pastas de departamento que todo dono vai ter. Adicione um departamento por vez; ele entra no fim da lista. A descrição é opcional: uma frase curta sobre o que o departamento guarda, que ajuda a classificar os documentos. Use as setas para subir ou descer um departamento e Desativar em vez de apagar. O painel pede confirmação antes de desativar.{% endcall %}
+{% call help_block("template") %}Esta lista define as pastas de departamento que todo dono vai ter. Adicione um departamento por vez; ele entra no fim da lista. A descrição é opcional: uma frase curta sobre o que o departamento guarda, que ajuda a classificar os documentos. Use as setas para subir ou descer um departamento e Desativar, com confirmação, em vez de apagar.{% endcall %}
 <section class="card flush">
   {% if departments %}
   <div class="table-wrap">
