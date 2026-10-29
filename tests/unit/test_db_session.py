@@ -37,6 +37,10 @@ MIGRATION_0003 = (
     Path(__file__).resolve().parents[2] / "src/osa/db/migrations/versions/0003_courier.py"
 )
 
+MIGRATION_0004 = (
+    Path(__file__).resolve().parents[2] / "src/osa/db/migrations/versions/0004_document_name.py"
+)
+
 FICTIONAL_PASSWORD = "fictional-pw-123"
 URL = f"postgresql://osa:{FICTIONAL_PASSWORD}@db.example.invalid:5432/osa_fictional"
 
@@ -166,8 +170,12 @@ def _load_0003() -> ModuleType:
     return _load_migration(MIGRATION_0003, "migration_0003")
 
 
+def _load_0004() -> ModuleType:
+    return _load_migration(MIGRATION_0004, "migration_0004")
+
+
 def _migration_ddl() -> str:
-    """DDL of 0001 to 0003 with a bare context: no target_metadata, no naming convention."""
+    """DDL of 0001 to 0004 with a bare context: no target_metadata, no naming convention."""
     buffer = io.StringIO()
     context = MigrationContext.configure(
         dialect_name="postgresql", opts={"as_sql": True, "output_buffer": buffer}
@@ -176,6 +184,7 @@ def _migration_ddl() -> str:
         _load_0001().upgrade()
         _load_0002().upgrade()
         _load_0003().upgrade()
+        _load_0004().upgrade()
     return buffer.getvalue()
 
 
@@ -220,7 +229,7 @@ def test_migration_names_every_constraint_without_env_naming_convention() -> Non
 
 
 def test_migration_constraints_and_indexes_match_models() -> None:
-    """Names, CHECK expressions and indexes of 0001 to 0003 equal what the models declare."""
+    """Names, CHECK expressions and indexes of 0001 to 0004 equal what the models declare."""
     assert _clauses(_migration_ddl()) == _clauses(_models_ddl())
 
 

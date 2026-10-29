@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from osa.courier.evidence import OwnerCandidate
@@ -25,6 +25,7 @@ from osa.db.models import (
     Root,
     User,
 )
+from osa.domain.document import ReviewState
 from osa.domain.errors import NotFound
 
 
@@ -54,6 +55,20 @@ class Store(Protocol):
     def operation(self, operation_id: int) -> ArchiveOperation: ...
 
     def operations_of(self, document_id: int) -> Sequence[ArchiveOperation]: ...
+
+    def review_case(self, case_id: int, *, for_update: bool = False) -> ReviewCase:
+        """The case; ``for_update`` locks its row until the commit (a decision in progress)."""
+        ...
+
+    def open_review_cases(self) -> Sequence[ReviewCase]: ...
+
+    def user_by_telegram_id(self, telegram_id: int) -> User | None: ...
+
+    def active_users(self) -> Sequence[User]: ...
+
+    def active_owners(self) -> Sequence[Owner]: ...
+
+    def documents_by_state(self) -> dict[str, int]: ...
 
     def audit(
         self,
@@ -154,6 +169,42 @@ class SqlStore:
                 .order_by(ArchiveOperation.id)
             )
         )
+
+    def review_case(self, case_id: int, *, for_update: bool = False) -> ReviewCase:
+        found = self._session.get(ReviewCase, case_id, with_for_update=for_update or None)
+        if found is None:
+            raise NotFound("caso de revisão não encontrado")
+        return found
+
+    def open_review_cases(self) -> Sequence[ReviewCase]:
+        return list(
+            self._session.scalars(
+                select(ReviewCase)
+                .where(ReviewCase.estado == ReviewState.ABERTO.value)
+                .order_by(ReviewCase.id)
+            )
+        )
+
+    def user_by_telegram_id(self, telegram_id: int) -> User | None:
+        return self._session.scalar(select(User).where(User.telegram_id == telegram_id))
+
+    def active_users(self) -> Sequence[User]:
+        return list(
+            self._session.scalars(select(User).where(User.ativo.is_(True)).order_by(User.id))
+        )
+
+    def active_owners(self) -> Sequence[Owner]:
+        return list(
+            self._session.scalars(
+                select(Owner).where(Owner.ativo.is_(True)).order_by(Owner.nome_fantasia, Owner.id)
+            )
+        )
+
+    def documents_by_state(self) -> dict[str, int]:
+        rows = self._session.execute(
+            select(Document.estado, func.count()).group_by(Document.estado)
+        )
+        return {str(estado): int(count) for estado, count in rows}
 
     def audit(
         self,

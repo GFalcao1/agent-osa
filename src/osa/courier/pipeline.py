@@ -7,6 +7,10 @@ row moves through the states of SPEC §9 and every transition is committed befor
 step, so the state is persisted **before** the rename and a failure anywhere leaves
 ``FALHOU`` with a reason and the file where it was. With effects off the whole flow runs and
 the archiving is recorded as simulated, without a rename.
+
+``archive_now`` is the one place that turns a decided owner and department into a rename:
+the automatic decision uses it here and the reviewer's decision uses it in
+``osa.courier.review``.
 """
 
 from __future__ import annotations
@@ -101,6 +105,19 @@ class ConfigurationError(DomainError):
     """
 
 
+class ArchiveRefused(DomainError):
+    """The share refused the rename and nothing was moved (SPEC §5-A step 7).
+
+    Name that does not fit, no proven exclusive rename, suffixes exhausted, missing or
+    unsafe destination folder. The automatic flow turns it into a review; a reviewer's
+    decision keeps the case open and shows the reason.
+    """
+
+    def __init__(self, message: str, *, destino_dir: str) -> None:
+        super().__init__(message)
+        self.destino_dir = destino_dir
+
+
 # --- outcomes ---------------------------------------------------------------------------
 
 
@@ -153,17 +170,14 @@ Outcome = Archived | Reviewed | Duplicate | NotSupported | Failed
 
 
 @dataclass(slots=True)
-class _Run:
-    intake: Intake
+class Ctx:
+    """What every step of the courier needs about one document: index, filesystem, actor."""
+
     store: Store
     fs: FsPort
-    content: ContentPort
-    llm: ClassifyPort
     actor: str
     effects_enabled: bool
     root: Root
-    owner: Owner | None
-    path: Path
     document: Document
 
     def audit(self, acao: str, resultado: str, **detalhes: Any) -> None:
@@ -228,8 +242,17 @@ class _Run:
         )
 
 
-def _template(departments: Sequence[Department]) -> list[TemplateDepartment]:
-    # Names in NFC, as the enum of the envelope spells them (``validate_departments``).
+@dataclass(slots=True)
+class _Run(Ctx):
+    intake: Intake
+    content: ContentPort
+    llm: ClassifyPort
+    owner: Owner | None
+    path: Path
+
+
+def template_of(departments: Sequence[Department]) -> list[TemplateDepartment]:
+    """The active template as the decision and the tree see it (names in NFC, as the enum)."""
     return [TemplateDepartment(d.id, nfc(d.nome), d.pasta, d.usa_ano) for d in departments]
 
 
@@ -315,6 +338,7 @@ def process(
     document = existing if existing is not None else Document(sha256=sha256)
     document.root_id = root.id
     document.caminho = intake.relative_path
+    document.nome = nfc(intake.original_name)
     document.origem = intake.origin.value
     document.enviado_por = intake.sender
     document.estado = DocumentState.DETECTADO.value
@@ -326,7 +350,7 @@ def process(
         store.add_document(document)
     else:
         store.save()
-    run = _Run(intake, store, fs, content, llm, actor, effects_enabled, root, owner, path, document)
+    run = _Run(store, fs, actor, effects_enabled, root, document, intake, content, llm, owner, path)
     run.audit(
         "document.detect",
         RESULT_OK,
@@ -426,7 +450,7 @@ def _steps(run: _Run) -> Outcome:
     store.commit()
 
     # 6. evidence and decision (SPEC §6)
-    template = _template(departments)
+    template = template_of(departments)
     evidence, reserva = _owner_evidence(run, extracted)
     decision = decide(evidence, envelope, template)
     if reserva is not None:
@@ -442,7 +466,27 @@ def _steps(run: _Run) -> Outcome:
             decision.department,
             evidencia=evidence.kind if evidence is not None else None,
         )
-    return _archive(run, decision, template, intake)
+    owner = run.owner if run.owner is not None else store.owner(decision.owner_id)
+    try:
+        return archive_now(
+            run,
+            owner=owner,
+            department=decision.department,
+            template=template,
+            year=decision.year,
+            source_rel=intake.relative_path,
+            original_name=intake.original_name,
+            modo=ArchiveMode.AUTO.value,
+            evidencia="declarado" if run.owner is not None else "texto",
+        )
+    except ArchiveRefused as error:
+        # Nothing was moved and the case goes to review (SPEC §5-A step 7).
+        return run.review(
+            MOTIVO_ARQUIVAMENTO_RECUSADO,
+            decision.department,
+            erro=str(error),
+            destino_dir=error.destino_dir,
+        )
 
 
 def _apply_envelope(document: Document, envelope: ClassificationEnvelope) -> None:
@@ -494,106 +538,110 @@ def _owner_evidence(
     return declared_evidence(declared.id), None
 
 
-def _archive(
-    run: _Run,
-    decision: AutoArchive,
+def archive_now(
+    ctx: Ctx,
+    *,
+    owner: Owner,
+    department: TemplateDepartment,
     template: Sequence[TemplateDepartment],
-    intake: Intake,
-) -> Outcome:
-    store, fs, document = run.store, run.fs, run.document
-    owner = run.owner if run.owner is not None else store.owner(decision.owner_id)
-    department = decision.department
-    root = Path(run.root.caminho)
+    year: int | None,
+    source_rel: str | None,
+    original_name: str,
+    modo: str,
+    evidencia: str,
+) -> Archived | Failed:
+    """Turn a decided owner, department and year into the rename (SPEC §5-A step 7).
+
+    The decision is persisted and audited (``archive.intent``) **before** any effect. The
+    template tree is completed, then the file is renamed; ``ArchiveRefused`` means the
+    share refused it and nothing was moved; ``Failed`` means the rename happened but the
+    source changed meanwhile (recorded, never rolled back). With effects off the
+    destination is predicted and recorded as simulated.
+    """
+    store, fs, document = ctx.store, ctx.fs, ctx.document
+    root = Path(ctx.root.caminho)
     parts = [owner.pasta, department.pasta]
-    if decision.year is not None:
-        parts.append(str(decision.year))
+    if year is not None:
+        parts.append(str(year))
     dest_dir = "/".join(parts)
 
-    # The decision is persisted before any effect (SPEC §9: state first, rename after).
     document.owner_id = owner.id
     document.departamento_id = department.id
-    if decision.year is not None:
-        document.ano = decision.year
+    if year is not None:
+        document.ano = year
     store.save()
-    run.audit(
+    ctx.audit(
         "archive.intent",
         RESULT_OK,
         owner_id=owner.id,
         departamento_id=department.id,
-        ano=decision.year,
+        ano=year,
         destino_dir=dest_dir,
-        origem=intake.relative_path,
-        evidencia="declarado" if run.owner is not None else "texto",
+        origem=source_rel,
+        modo=modo,
+        evidencia=evidencia,
     )
     store.commit()
 
     try:
-        fs.ensure_owner_tree(root, owner.pasta, template, None, effects_enabled=run.effects_enabled)
-        if decision.year is not None:
+        fs.ensure_owner_tree(root, owner.pasta, template, None, effects_enabled=ctx.effects_enabled)
+        if year is not None:
             fs.ensure_owner_tree(
-                root, owner.pasta, [department], decision.year, effects_enabled=run.effects_enabled
+                root, owner.pasta, [department], year, effects_enabled=ctx.effects_enabled
             )
-        if intake.relative_path is None or (
-            not run.effects_enabled and not fs.has_folder(root, dest_dir)
-        ):
-            # Simulated run (effects are off, checked at the start) on a file outside the root
-            # or into a folder that only the real run would create: the destination is
-            # predicted without the collision check.
-            predicted = f"{dest_dir}/{nfc(intake.original_name)}"
-            return _simulated(run, owner, department, predicted, suffix=1)
+        if source_rel is None or (not ctx.effects_enabled and not fs.has_folder(root, dest_dir)):
+            # Simulated run (effects are off) on a file outside the root or into a folder
+            # that only the real run would create: predicted, without the collision check.
+            predicted = f"{dest_dir}/{nfc(original_name)}"
+            return _simulated(ctx, owner, department, predicted, suffix=1)
         result = fs.archive(
-            root,
-            intake.relative_path,
-            dest_dir,
-            intake.original_name,
-            effects_enabled=run.effects_enabled,
+            root, source_rel, dest_dir, original_name, effects_enabled=ctx.effects_enabled
         )
     except IdentityChanged as error:
         # The rename happened and the identity check came after it: no automatic rollback.
         # The move is recorded (SPEC §5-E) so the file can be found; an undo is refused by
         # the hash, because the content is not the one of the record.
-        if error.destino is not None and intake.relative_path is not None:
+        if error.destino is not None and source_rel is not None:
             document.caminho = error.destino
             store.add_operation(
                 ArchiveOperation(
                     document_id=document.id,
-                    root_id=run.root.id,
-                    origem=intake.relative_path,
+                    root_id=ctx.root.id,
+                    origem=source_rel,
                     destino=error.destino,
                     sha256=document.sha256,
-                    ator=run.actor,
-                    modo=ArchiveMode.AUTO.value,
+                    ator=ctx.actor,
+                    modo=modo,
                 )
             )
-        return run.failed(f"identidade da origem mudou: {error}", destino=error.destino)
+        return ctx.failed(f"identidade da origem mudou: {error}", destino=error.destino)
     except DomainError as error:
-        # Name too long, no proven exclusive rename, suffixes exhausted, folder missing or
-        # unsafe: nothing was moved and the case goes to review (SPEC §5-A step 7).
-        return run.review(
-            MOTIVO_ARQUIVAMENTO_RECUSADO, department, erro=str(error), destino_dir=dest_dir
-        )
+        ctx.audit("document.archive", RESULT_DENIED, erro=str(error), destino_dir=dest_dir)
+        store.commit()
+        raise ArchiveRefused(str(error), destino_dir=dest_dir) from error
     if result.simulated:
-        return _simulated(run, owner, department, result.dest_rel, suffix=result.suffix)
+        return _simulated(ctx, owner, department, result.dest_rel, suffix=result.suffix)
 
     operation = store.add_operation(
         ArchiveOperation(
             document_id=document.id,
-            root_id=run.root.id,
+            root_id=ctx.root.id,
             origem=result.source_rel,
             destino=result.dest_rel,
             sha256=document.sha256,
-            ator=run.actor,
-            modo=ArchiveMode.AUTO.value,
+            ator=ctx.actor,
+            modo=modo,
         )
     )
     document.caminho = result.dest_rel
-    run.move_to(DocumentState.ARQUIVADO)
-    run.audit(
+    ctx.move_to(DocumentState.ARQUIVADO)
+    ctx.audit(
         "document.archive",
         RESULT_OK,
         destino=result.dest_rel,
         operation_id=operation.id,
         sufixo=result.suffix,
+        modo=modo,
         primitiva=result.primitive.value if result.primitive is not None else None,
     )
     store.commit()
@@ -611,13 +659,13 @@ def _archive(
 
 
 def _simulated(
-    run: _Run, owner: Owner, department: TemplateDepartment, destino: str, *, suffix: int
+    ctx: Ctx, owner: Owner, department: TemplateDepartment, destino: str, *, suffix: int
 ) -> Archived:
     """Effects off: everything was decided, nothing was renamed (SPEC: ``simulated``)."""
-    run.document.motivo = f"simulado: {destino}"
-    run.store.save()
-    run.audit("document.archive", RESULT_SIMULATED, destino=destino, sufixo=suffix)
-    run.store.commit()
+    ctx.document.motivo = f"simulado: {destino}"
+    ctx.store.save()
+    ctx.audit("document.archive", RESULT_SIMULATED, destino=destino, sufixo=suffix)
+    ctx.store.commit()
     return Archived(
-        run.document.id, run.document.estado, destino, True, None, suffix, owner.id, department.id
+        ctx.document.id, ctx.document.estado, destino, True, None, suffix, owner.id, department.id
     )

@@ -156,6 +156,9 @@ class Document(Base):
     sha256: Mapped[str] = mapped_column(String(64), unique=True)
     root_id: Mapped[int | None] = mapped_column(ForeignKey("roots.id"), index=True)
     caminho: Mapped[str | None] = mapped_column(Text)
+    # The original file name (NFC): the quarantine renames the file to an id, and a review
+    # decided later needs the name to archive under.
+    nome: Mapped[str | None] = mapped_column(Text)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("owners.id"), index=True)
     departamento_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), index=True)
     ano: Mapped[int | None] = mapped_column(Integer)
