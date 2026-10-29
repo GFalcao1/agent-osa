@@ -623,9 +623,10 @@ def create_department(
     descricao: str | None = None,
     actor: str,
 ) -> Department:
-    nome = department_name(nome)
+    nome = _text(nome, "nome")
     description = department_description(descricao)
     folder = validate_folder_name(pasta) if pasta and pasta.strip() else derive_folder_name(nome)
+    nome = department_name(nome)
     _lock(session, _FOLDER_LOCK)
     _department_collision(session, nome, folder)
     position = session.scalar(select(func.coalesce(func.max(Department.ordem), 0))) or 0
@@ -652,9 +653,10 @@ def update_department(
     actor: str,
 ) -> Change[Department]:
     department = _fetch(session, Department, department_id, "departamento")
-    nome = department_name(nome)
+    nome = _text(nome, "nome")
     description = department_description(descricao)
     folder = validate_folder_name(pasta)
+    nome = department_name(nome)
     _lock(session, _FOLDER_LOCK)
     _department_collision(session, nome, folder, exclude_id=department.id)
     changed: list[str] = []
