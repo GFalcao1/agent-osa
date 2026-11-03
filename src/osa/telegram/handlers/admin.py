@@ -72,7 +72,8 @@ def send_status(ctx: BotContext, actor: Actor, chat_id: int) -> None:
         f"Revisões abertas: {info.revisoes_abertas}.\n"
         f"Modelo: {info.modelo}" + (f" ({info.digest[:12]}…)" if info.digest else "") + ".\n"
         f"Efeitos de arquivo: {'ligados' if info.efeitos else 'desligados'}.\n"
-        f"Raízes:\n{roots or '- nenhuma ativa'}",
+        + (f"Versão: osa {info.versao}.\n" if info.versao else "")
+        + f"Raízes:\n{roots or '- nenhuma ativa'}",
     )
 
 

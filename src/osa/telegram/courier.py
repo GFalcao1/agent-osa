@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from osa.admin import services
 from osa.core.settings import Settings
+from osa.core.version import full_version
 from osa.courier import owners as courier_owners
 from osa.courier import review as courier_review
 from osa.courier.intake import Intake, quarantine_suffix, stage_upload
@@ -368,6 +369,7 @@ class RealCourier:
                 digest=config.digest,
                 efeitos=self.settings.enable_file_effects,
                 raizes=tuple(roots),
+                versao=full_version(),
             )
 
     # --- query and send (TASK-110) -------------------------------------------------------------

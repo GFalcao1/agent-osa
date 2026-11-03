@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  osa-bot no Mac mini (TASK-112). Instalação em /opt/osa (checkout + .venv), configuração em
+  /opt/osa/.env (lida pelo próprio processo; nada de segredo neste arquivo), conta de serviço
+  "osa". Instalar: sudo cp deploy/launchd/com.osa.bot.plist /Library/LaunchDaemons/ &&
+  sudo launchctl bootstrap system /Library/LaunchDaemons/com.osa.bot.plist
+  KeepAlive reinicia o processo se ele morrer; ThrottleInterval evita reinício em laço.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.osa.bot</string>
+  <key>UserName</key>
+  <string>osa</string>
+  <key>WorkingDirectory</key>
+  <string>/opt/osa</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/osa/.venv/bin/osa-bot</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Standard</string>
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- the JSON log, reopened by the process when newsyslog rotates it -->
+    <key>OSA_LOG_FILE</key>
+    <string>/usr/local/var/log/osa/bot.log</string>
+  </dict>
+  <!-- only what escapes before logging starts (a crash at import); also rotated -->
+  <key>StandardOutPath</key>
+  <string>/usr/local/var/log/osa/bot.stderr.log</string>
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/osa/bot.stderr.log</string>
+</dict>
+</plist>

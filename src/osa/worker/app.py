@@ -351,8 +351,10 @@ def run(settings: Settings) -> None:
 
 def main() -> None:
     """Entrypoint ``osa-worker``."""
-    configure_logging()
     settings = Settings()
+    configure_logging(
+        service="worker", log_file=str(settings.log_file) if settings.log_file else None
+    )
     if settings.database_url is None:
         raise SystemExit("erro: database is not configured: set OSA_DATABASE_URL")
     run(settings)

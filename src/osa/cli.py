@@ -605,7 +605,9 @@ def worker_command() -> None:
     settings = _settings()
     if settings.database_url is None:
         _fail("database is not configured: set OSA_DATABASE_URL")
-    configure_logging()
+    configure_logging(
+        service="worker", log_file=str(settings.log_file) if settings.log_file else None
+    )
     typer.echo(
         "worker em polling a cada "
         f"{settings.poll_interval_seconds} s (efeitos de arquivo "
@@ -626,7 +628,7 @@ def bot_command() -> None:
         _fail("OSA_TELEGRAM_BOT_TOKEN não configurado")
     if settings.database_url is None:
         _fail("database is not configured: set OSA_DATABASE_URL")
-    configure_logging()
+    configure_logging(service="bot", log_file=str(settings.log_file) if settings.log_file else None)
     typer.echo(
         "bot do Telegram em long polling "
         f"(efeitos de arquivo {'ligados' if settings.enable_file_effects else 'desligados'})",
