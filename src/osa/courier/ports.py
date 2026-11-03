@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from osa.extract.model import ExtractedContent
     from osa.fs.archive import ArchiveResult
     from osa.fs.template import TreeResult
+    from osa.fs.walk import Visit
     from osa.llm.envelopes import ClassificationEnvelope, DepartmentInput
 
 _CHUNK = 1024 * 1024
@@ -60,6 +61,10 @@ class FsPort(Protocol):
         ...
 
     def has_folder(self, root: Path, relative: str) -> bool: ...
+
+    def walk(self, root: Path, *, after: str | None = None) -> Iterator[Visit]:
+        """Regular files of the root in a deterministic order, from ``after`` on (the scan)."""
+        ...
 
     def ensure_owner_tree(
         self,
@@ -149,6 +154,11 @@ class LocalFs:
             return resolve_within(root, relative).is_dir()
         except NotFound:
             return False
+
+    def walk(self, root: Path, *, after: str | None = None) -> Iterator[Visit]:
+        from osa.fs.walk import iter_files
+
+        return iter_files(root, after=after)
 
     def ensure_owner_tree(
         self,

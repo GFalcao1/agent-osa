@@ -41,6 +41,10 @@ MIGRATION_0004 = (
     Path(__file__).resolve().parents[2] / "src/osa/db/migrations/versions/0004_document_name.py"
 )
 
+MIGRATION_0005 = (
+    Path(__file__).resolve().parents[2] / "src/osa/db/migrations/versions/0005_scan_fts.py"
+)
+
 FICTIONAL_PASSWORD = "fictional-pw-123"
 URL = f"postgresql://osa:{FICTIONAL_PASSWORD}@db.example.invalid:5432/osa_fictional"
 
@@ -174,8 +178,12 @@ def _load_0004() -> ModuleType:
     return _load_migration(MIGRATION_0004, "migration_0004")
 
 
+def _load_0005() -> ModuleType:
+    return _load_migration(MIGRATION_0005, "migration_0005")
+
+
 def _migration_ddl() -> str:
-    """DDL of 0001 to 0004 with a bare context: no target_metadata, no naming convention."""
+    """DDL of 0001 to 0005 with a bare context: no target_metadata, no naming convention."""
     buffer = io.StringIO()
     context = MigrationContext.configure(
         dialect_name="postgresql", opts={"as_sql": True, "output_buffer": buffer}
@@ -185,6 +193,7 @@ def _migration_ddl() -> str:
         _load_0002().upgrade()
         _load_0003().upgrade()
         _load_0004().upgrade()
+        _load_0005().upgrade()
     return buffer.getvalue()
 
 
@@ -229,8 +238,15 @@ def test_migration_names_every_constraint_without_env_naming_convention() -> Non
 
 
 def test_migration_constraints_and_indexes_match_models() -> None:
-    """Names, CHECK expressions and indexes of 0001 to 0004 equal what the models declare."""
+    """Names, CHECK expressions and indexes of 0001 to 0005 equal what the models declare."""
     assert _clauses(_migration_ddl()) == _clauses(_models_ddl())
+
+
+def test_migration_0005_freezes_the_generated_column_expression() -> None:
+    """The model's expression equals the frozen one: a change needs a new migration."""
+    from osa.db.models import TEXTO_TSV_EXPRESSION
+
+    assert _load_0005().TEXTO_TSV_EXPRESSION == TEXTO_TSV_EXPRESSION
 
 
 def test_migration_vocabularies_match_domain_enums() -> None:
