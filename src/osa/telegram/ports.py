@@ -10,7 +10,7 @@ import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Protocol
 
 from osa.courier.owners import OwnerRequest
@@ -19,6 +19,7 @@ from osa.courier.review import LeftAtOrigin
 from osa.courier.undo import UndoResult
 from osa.domain.user import Role
 from osa.extract.model import DEFAULT_SENSITIVE_EXTENSIONS
+from osa.llm.envelopes import IntentEnvelope, QueryEnvelope
 
 # --- incoming events ---------------------------------------------------------------------
 
@@ -75,7 +76,7 @@ Keyboard = Sequence[Sequence[Button]]
 
 
 class BotPort(Protocol):
-    """The five things the handlers do with Telegram; the adapter implements them."""
+    """What the handlers do with Telegram; the adapter implements it."""
 
     def send(self, chat_id: int, text: str, buttons: Keyboard = ()) -> int:
         """Send a message and return its id."""
@@ -86,6 +87,12 @@ class BotPort(Protocol):
     def answer(self, callback_id: str, text: str | None = None) -> None: ...
 
     def download(self, file_id: str) -> bytes: ...
+
+    def send_document(
+        self, chat_id: int, data: bytes, filename: str, caption: str | None = None
+    ) -> int:
+        """Send a file as a document (never as a photo: no compression) and return its id."""
+        ...
 
 
 # --- the courier as the bot sees it ---------------------------------------------------------
@@ -157,6 +164,79 @@ class CaseInfo:
 class RootSpace:
     caminho: str
     livre_bytes: int | None  # None when the root cannot be measured
+    ultimo_scan: datetime | None = None  # the last finished scan of the root (TASK-109)
+
+
+@dataclass(frozen=True, slots=True)
+class Understood:
+    """The filters of a search as the registry understood them, for the reply and the audit.
+
+    ``*_desconhecido`` is what the message named and the registry does not know.
+    """
+
+    dono_id: int | None
+    dono: str | None
+    dono_desconhecido: str | None
+    departamento_id: int | None
+    departamento: str | None
+    departamento_desconhecido: str | None
+    tipo_documental: str | None
+    periodo_inicio: date | None
+    periodo_fim: date | None
+    palavras_chave: tuple[str, ...]
+
+    def as_audit(self) -> dict[str, object]:
+        """The query as the audit keeps it: ids, the type, the period and the keywords."""
+        return {
+            "dono_id": self.dono_id,
+            "dono_desconhecido": self.dono_desconhecido is not None,
+            "departamento_id": self.departamento_id,
+            "departamento_desconhecido": self.departamento_desconhecido is not None,
+            "tipo_documental": self.tipo_documental,
+            "periodo_inicio": self.periodo_inicio.isoformat() if self.periodo_inicio else None,
+            "periodo_fim": self.periodo_fim.isoformat() if self.periodo_fim else None,
+            "palavras_chave": list(self.palavras_chave),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class HitInfo:
+    """One document found, as a button shows it; never its text."""
+
+    document_id: int
+    nome: str
+    dono: str | None
+    departamento: str | None
+    ano: int | None
+    tipo_documental: str | None
+    sensivel: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SearchResult:
+    hits: tuple[HitInfo, ...]  # at most ``osa.search.intent.SEARCH_LIMIT``
+    filtros: Understood
+
+
+@dataclass(frozen=True, slots=True)
+class FileToSend:
+    nome: str
+    data: bytes
+    sha256: str  # checked against the index before it is returned
+
+
+@dataclass(frozen=True, slots=True)
+class PathToShow:
+    caminho: str  # the network path (or the path on this machine without a UNC)
+    motivo: str
+
+
+@dataclass(frozen=True, slots=True)
+class SendRefused:
+    motivo: str
+
+
+SendPlan = FileToSend | PathToShow | SendRefused
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +300,32 @@ class CourierPort(Protocol):
 
     def status(self) -> StatusInfo: ...
 
+    def interpret(self, text: str) -> IntentEnvelope:
+        """The intent envelope of an operator's message: only the message goes to the model."""
+        ...
+
+    def search(self, query: QueryEnvelope, *, actor: Actor) -> SearchResult:
+        """The index searched with the query; audited (``query.search``), never the text."""
+        ...
+
+    def prepare_send(
+        self, document_id: int, *, actor: Actor, consulta: dict[str, object]
+    ) -> SendPlan:
+        """How the document reaches ``actor``; a path or a refusal is audited here."""
+        ...
+
+    def record_send(
+        self,
+        document_id: int,
+        *,
+        actor: Actor,
+        consulta: dict[str, object],
+        ok: bool,
+        erro: str | None = None,
+    ) -> None:
+        """The audit of a file sent through Telegram (``document.send``), after the attempt."""
+        ...
+
 
 # --- dialog state ----------------------------------------------------------------------------
 
@@ -248,6 +354,19 @@ class PendingOwnerRequest:
 
 
 @dataclass(slots=True)
+class Offer:
+    """The documents a search offered to one user in one chat, with the query that found them.
+
+    A button press is honoured only for a document in the offer: callback data can be forged
+    by a modified client, and the audit needs the query behind each send.
+    """
+
+    document_ids: tuple[int, ...]
+    consulta: dict[str, object]
+    message_id: int  # the message whose buttons carry this offer
+
+
+@dataclass(slots=True)
 class ReviewDraft:
     """What the reviewer has chosen so far for one case; lives until the bot restarts."""
 
@@ -270,6 +389,7 @@ class BotState:
         self.uploads: dict[tuple[int, int], PendingUpload] = {}
         self.owner_requests: dict[str, PendingOwnerRequest] = {}
         self.drafts: dict[int, ReviewDraft] = {}
+        self.offers: dict[tuple[int, int], Offer] = {}  # (chat_id, users.id)
         self._case_locks: dict[int, threading.Lock] = {}
 
     def case_lock(self, case_id: int) -> threading.Lock:

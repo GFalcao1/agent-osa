@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from osa.admin.services import EffectiveModelConfig
     from osa.core.settings import Settings
     from osa.extract.model import ExtractedContent
-    from osa.llm.envelopes import ClassificationEnvelope, DepartmentInput, QueryEnvelope
+    from osa.llm.envelopes import ClassificationEnvelope, DepartmentInput, IntentEnvelope
     from osa.llm.external import AuditSink, ExternalTransport, OwnerNames
     from osa.llm.ollama import OllamaProvider
 
@@ -85,7 +85,9 @@ class LLMProvider(Protocol):
         self, content: ExtractedContent, departments: Sequence[DepartmentInput]
     ) -> ClassificationEnvelope: ...
 
-    def interpret(self, text: str, departments: Sequence[DepartmentInput]) -> QueryEnvelope: ...
+    def interpret(self, text: str, departments: Sequence[DepartmentInput]) -> IntentEnvelope:
+        """What an operator's message asks for (TASK-110); only the message goes to the model."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)

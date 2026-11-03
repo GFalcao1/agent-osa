@@ -22,6 +22,14 @@
       </div>
     </div>
     {% if root.descricao %}<p class="muted">{{ root.descricao }}</p>{% endif %}
+    <p class="muted">Caminho de rede: {% if root.unc %}<code>{{ root.unc }}</code>{% else %}não informado{% endif %}</p>
+    {% if bootstrapped %}
+    <form class="inline-form" method="post" action="/roots/{{ root.id }}/unc">
+      {% include "_csrf.html" %}
+      {{ field("unc-" ~ root.id, "unc", "Caminho de rede", hint="como os computadores abrem a pasta; vazio apaga", value=root.unc or "") }}
+      <button type="submit" class="btn">{{ icon("floppy-disk") }}Salvar caminho</button>
+    </form>
+    {% endif %}
     <div class="divided">
       <p class="section-label">Pastas monitoradas</p>
       {% set root_folders = folders.get(root.id, []) %}
@@ -61,6 +69,7 @@
     <div class="form-grid">
       {{ field("nova-raiz-caminho", "caminho", "Caminho absoluto", hint="começa com /", required=true) }}
       {{ field("nova-raiz-descricao", "descricao", "Descrição", hint="opcional") }}
+      {{ field("nova-raiz-unc", "unc", "Caminho de rede", hint="opcional, começa com \\\\") }}
     </div>
     <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon("plus") }}Cadastrar raiz</button></div>
   </fieldset>

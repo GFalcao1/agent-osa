@@ -41,11 +41,11 @@ from osa.llm import prompts
 from osa.llm.envelopes import (
     ClassificationEnvelope,
     DepartmentInput,
-    QueryEnvelope,
+    IntentEnvelope,
     classification_envelope,
     department_specs,
+    intent_envelope,
     parse_envelope,
-    query_envelope,
     schema_hash,
     wire_schema,
 )
@@ -515,9 +515,9 @@ class OllamaProvider:
                 )
         return envelope
 
-    def interpret(self, text: str, departments: Sequence[DepartmentInput]) -> QueryEnvelope:
+    def interpret(self, text: str, departments: Sequence[DepartmentInput]) -> IntentEnvelope:
         specs = department_specs(departments)
-        model = query_envelope(specs)
+        model = intent_envelope(specs)
         with self._lock:
             rendered = prompts.render_query(
                 text, specs, today=self._today(), nonce_factory=self._nonce_factory

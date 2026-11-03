@@ -231,6 +231,13 @@ def test_complete_fictitious_registration_through_the_panel(
     with web.db() as session:
         root = session.scalars(select(Root)).one()
     web.post(f"/roots/{root.id}/pastas", caminho="entrada")
+    web.post(f"/roots/{root.id}/unc", unc="//srv/acervo/")
+    with web.db() as session:
+        assert session.get_one(Root, root.id).unc == "\\\\srv\\acervo"
+    assert "\\\\srv\\acervo" in web.get("/roots")
+    refused = web.post(f"/roots/{root.id}/unc", status=400, unc="srv acervo")
+    assert "caminho de rede inválido" in refused
+    web.post(f"/roots/{root.id}/unc", unc="\\\\srv\\acervo")
     for nome, ano in (("Fiscal", "on"), ("Pessoal", None), ("Contábil", None), ("Jurídico", None)):
         web.post("/departments", nome=nome, **({"usa_ano": ano} if ano else {}))
     web.post(
@@ -277,7 +284,7 @@ def test_complete_fictitious_registration_through_the_panel(
         )
         probes = [e for e in mutations if e.acao == "root.probe"]
         assert len(probes) == 1  # the write probe, on its own transaction (SPEC §10)
-        assert len(mutations) - len(probes) == 1 + 1 + 4 + 2 + 2 + 1
+        assert len(mutations) - len(probes) == 1 + 1 + 2 + 4 + 2 + 2 + 1  # 2: root.unc
         assert {e.resultado for e in mutations} == {"ok"}
         yaml_text = export.export_yaml(session)
         details = [e.detalhes for e in session.scalars(select(AuditEvent))]

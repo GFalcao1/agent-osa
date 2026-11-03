@@ -6,10 +6,14 @@ summary, the reason code and the destination, as SPEC §5-A and TASK-108 allow.
 
 from __future__ import annotations
 
-from typing import Final
+from datetime import date
+from typing import TYPE_CHECKING, Final
 
 from osa.courier.pipeline import Archived, Duplicate, Failed, NotSupported, Outcome, Reviewed
 from osa.courier.review import LeftAtOrigin
+
+if TYPE_CHECKING:
+    from osa.telegram.ports import HitInfo, Understood
 
 MAX_RESUMO: Final = 160
 MAX_MOTIVO: Final = 120
@@ -73,6 +77,73 @@ UPLOAD_FAILED: Final = "Não consegui guardar o arquivo para processar. Envie de
 CONFIG_ERROR: Final = (
     "O cadastro impede a classificação: {erro}. O administrador precisa corrigir no painel."
 )
+
+
+HELP: Final = (
+    "O que você pode me pedir:\n"
+    "- Guardar: envie o documento como arquivo e diga de quem ele é na legenda.\n"
+    "- Achar: escreva o que procura, por exemplo «manda o contrato da Alfa de 2025» ou "
+    "«boletos de março da Beta». Eu mostro até 5 resultados para você escolher.\n"
+    "- «quais donos existem?» e «quais departamentos existem?» listam o cadastro.\n"
+    "- /pendentes mostra as revisões abertas (revisores); /status e /desfazer são do "
+    "administrador."
+)
+ASK_WHAT: Final = (
+    "Não entendi o que procurar. Diga o tipo de documento, o dono, o departamento ou o "
+    "período, por exemplo «contrato da Alfa de 2025»."
+)
+QUERY_TOO_LONG: Final = "Mensagem longa demais para uma busca. Escreva só o que procura."
+MODEL_UNAVAILABLE: Final = (
+    "Não consegui entender o pedido agora (o modelo não respondeu). Tente de novo."
+)
+QUERY_FAILED: Final = "Não consegui fazer a busca: {erro}"
+SEND_CANCELLED: Final = "Tudo bem, nada foi enviado."
+SEND_FAILED: Final = "Não consegui enviar o arquivo pelo Telegram. Tente de novo."
+SEND_REFUSED: Final = "Não enviado: {motivo}."
+SEND_PATH: Final = "O arquivo não vai pelo Telegram ({motivo}). Abra no servidor:\n{caminho}"
+OFFER_LOST: Final = "Essa busca não está mais em memória (o bot reiniciou). Peça de novo."
+NOT_IN_OFFER: Final = "Esse documento não está nesta busca. Peça de novo."
+MAX_LISTED_NAMES: Final = 50
+
+
+def describe_filters(filtros: Understood) -> str:
+    """The filters as the registry understood them, in one line; never a guess."""
+    parts: list[str] = []
+    if filtros.dono:
+        parts.append(f"dono {filtros.dono}")
+    if filtros.dono_desconhecido:
+        parts.append(f"dono «{short(filtros.dono_desconhecido, 40)}» (não cadastrado)")
+    if filtros.departamento:
+        parts.append(f"departamento {filtros.departamento}")
+    if filtros.departamento_desconhecido:
+        parts.append(
+            f"departamento «{short(filtros.departamento_desconhecido, 40)}» (fora do template)"
+        )
+    if filtros.tipo_documental:
+        parts.append(f"tipo {short(filtros.tipo_documental, 40)}")
+    if filtros.periodo_inicio or filtros.periodo_fim:
+        parts.append(f"período {_period(filtros.periodo_inicio, filtros.periodo_fim)}")
+    if filtros.palavras_chave:
+        parts.append("palavras " + ", ".join(short(w, 30) for w in filtros.palavras_chave))
+    return " · ".join(parts) if parts else "nenhum filtro"
+
+
+def _period(start: date | None, end: date | None) -> str:
+    if start and end:
+        return f"de {start:%d/%m/%Y} a {end:%d/%m/%Y}"
+    if start:
+        return f"a partir de {start:%d/%m/%Y}"
+    assert end is not None
+    return f"até {end:%d/%m/%Y}"
+
+
+def hit_label(hit: HitInfo, limit: int = 60) -> str:
+    """A button: the file name, the owner and the year; the sensitive class is flagged."""
+    extra = " · ".join(str(part) for part in (hit.dono, hit.ano) if part)
+    label = f"{hit.nome} · {extra}" if extra else hit.nome
+    if hit.sensivel:
+        label = f"[sensível] {label}"
+    return short(label, limit)
 
 
 def short(text: str | None, limit: int) -> str:

@@ -114,12 +114,12 @@ def test_nonce_differs_per_call_but_template_hash_is_stable() -> None:
 
 def test_prompt_hash_is_pinned_so_edits_are_deliberate() -> None:
     # Edit a template: update this value and bump PROMPT_VERSION in the same change.
-    assert prompts.PROMPT_VERSION == "4"
+    assert prompts.PROMPT_VERSION == "5"
     assert prompts.prompt_hash() == PINNED_HASH
     assert len({prompts.prompt_hash("classify"), prompts.prompt_hash("query"), PINNED_HASH}) == 3
 
 
-PINNED_HASH = "738936fc3c6bd249ad2fbe6a7d39c8942a5f7d236e75a0b428c3afc059eff6f6"
+PINNED_HASH = "b8cb8b5dacac7f77eeaaba7bccf54eb361f5e554e4f7ccef0835701628a96125"
 
 
 @pytest.mark.parametrize("limit", [12000, 50])

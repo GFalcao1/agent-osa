@@ -12,8 +12,10 @@ from typing import Any
 import pytest
 
 from osa.llm.envelopes import (
+    ACOES,
     ClassificationEnvelope,
     classification_envelope,
+    intent_envelope,
     parse_envelope,
     query_envelope,
     schema_hash,
@@ -259,7 +261,11 @@ def test_wire_schema_is_flat_and_keywords_are_whitelisted() -> None:
             for index, item in enumerate(node):
                 walk(item, f"{path}[{index}]")
 
-    for model in (classification_envelope(DEPARTMENTS), query_envelope(DEPARTMENTS)):
+    for model in (
+        classification_envelope(DEPARTMENTS),
+        query_envelope(DEPARTMENTS),
+        intent_envelope(DEPARTMENTS),
+    ):
         schema = wire_schema(model)
         walk(schema)
         assert "$ref" not in json.dumps(schema)
@@ -529,3 +535,51 @@ def test_repaired_envelope_is_still_frozen_and_revalidates_to_itself(path: Build
     with pytest.raises(pydantic.ValidationError):
         envelope.precisa_revisao = False  # type: ignore[misc]
     assert type(envelope).model_validate_json(envelope.model_dump_json()) == envelope
+
+
+# --- envelope de intenção (TASK-110) ------------------------------------------------------------
+
+
+def test_intent_envelope_puts_the_action_first_and_keeps_the_query_fields() -> None:
+    schema = wire_schema(intent_envelope(DEPARTMENTS))
+
+    assert list(schema["properties"]) == [
+        "acao", "dono", "departamento", "tipo_documental", "periodo_inicio", "periodo_fim",
+        "palavras_chave",
+    ]  # fmt: skip
+    assert schema["properties"]["acao"]["enum"] == list(ACOES)
+
+
+def test_intent_envelope_nests_the_query_for_the_search() -> None:
+    model = intent_envelope(DEPARTMENTS)
+    envelope = parse_envelope(
+        model,
+        json.dumps(
+            {
+                "acao": "buscar", "dono": "Alfa", "departamento": None,
+                "tipo_documental": "contrato", "periodo_inicio": "2025-01-01",
+                "periodo_fim": "2025-12-31", "palavras_chave": ["consultoria"],
+            }
+        ),
+    )  # fmt: skip
+
+    query = envelope.consulta
+    assert (query.dono, query.tipo_documental) == ("Alfa", "contrato")
+    assert (query.periodo_inicio, query.periodo_fim) == (date(2025, 1, 1), date(2025, 12, 31))
+    assert query.palavras_chave == ["consultoria"]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [{"acao": "apagar"}, {"acao": None}, {"departamento": "Inexistente"},
+     {"periodo_inicio": "2025-12-31", "periodo_fim": "2025-01-01"}],
+)  # fmt: skip
+def test_intent_envelope_refuses_unknown_actions_departments_and_inverted_periods(
+    bad: dict[str, Any],
+) -> None:
+    base = {
+        "acao": "buscar", "dono": None, "departamento": None, "tipo_documental": None,
+        "periodo_inicio": None, "periodo_fim": None, "palavras_chave": [],
+    }  # fmt: skip
+    with pytest.raises(EnvelopeInvalid):
+        parse_envelope(intent_envelope(DEPARTMENTS), json.dumps({**base, **bad}))

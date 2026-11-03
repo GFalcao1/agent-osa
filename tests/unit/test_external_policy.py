@@ -66,6 +66,7 @@ OWNERS = (
 )
 
 QUERY_REPLY: dict[str, Any] = {
+    "acao": "buscar",
     "dono": None,
     "departamento": None,
     "tipo_documental": "contrato",

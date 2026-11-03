@@ -167,6 +167,15 @@ PROBLEMS: Final[dict[str, tuple[Problem, ...]]] = {
             "começa com /Volumes). Se mesmo assim for recusado, chame o responsável técnico.",
         ),
         Problem(
+            "caminho de rede inválido",
+            "O caminho de rede é o endereço que os computadores da empresa usam para abrir a "
+            "pasta, e o bot o mostra quando um arquivo não pode ir pelo Telegram. O que foi "
+            "digitado não tem esse formato.",
+            "Digite como no Explorador de Arquivos do Windows: duas barras invertidas, o nome "
+            "do servidor e o da pasta compartilhada, por exemplo \\\\servidor\\Documentos. "
+            "Deixe vazio se não souber; o bot mostra então o endereço desta máquina.",
+        ),
+        Problem(
             "raiz inacessível ou é link simbólico",
             "O painel não conseguiu abrir a pasta. Ela pode ser um atalho ou o programa pode "
             "não ter permissão para entrar nela.",
