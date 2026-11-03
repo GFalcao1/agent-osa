@@ -16,7 +16,7 @@ import pytest
 import structlog
 
 from osa.extract.model import ExtractedContent, PageImage
-from osa.llm.envelopes import classification_envelope, query_envelope, schema_hash, wire_schema
+from osa.llm.envelopes import classification_envelope, intent_envelope, schema_hash, wire_schema
 from osa.llm.ollama import OllamaConfig, OllamaProvider, required_num_ctx
 from osa.llm.prompts import prompt_hash
 from osa.llm.provider import (
@@ -36,6 +36,7 @@ SENTINEL = "SENTINELA-FICTICIA-DO-DOCUMENTO"
 KEY_SENTINEL = "chave-ficticia-nao-vazar"
 
 QUERY_REPLY = {
+    "acao": "buscar",
     "dono": None,
     "departamento": "Fiscal",
     "tipo_documental": None,
@@ -242,7 +243,8 @@ def test_query_request_uses_the_query_schema() -> None:
 
     assert envelope.palavras_chave == ["guia"]
     (body,) = server.bodies()
-    assert body["format"] == wire_schema(query_envelope(DEPARTMENTS))
+    assert body["format"] == wire_schema(intent_envelope(DEPARTMENTS))
+    assert list(body["format"]["properties"])[0] == "acao"
 
 
 def test_client_ignores_proxy_environment_and_redirects(monkeypatch: pytest.MonkeyPatch) -> None:

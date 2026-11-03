@@ -453,11 +453,41 @@ def _description(value: str | None) -> str | None:
     return _text(value, "descrição", required=False, limit=_MAX_DESCRIPTION) or None
 
 
+#: Longest UNC path accepted for a root (the classic Windows path limit).
+MAX_UNC = 260
+_UNC_FORBIDDEN = frozenset('<>:"|?*/')
+
+
+def root_unc(value: str | None) -> str | None:
+    """The root's network path in canonical form, or ``None`` when left empty.
+
+    ``\\\\servidor\\compartilhamento[\\pasta...]``; forward slashes are read as backslashes and
+    a trailing one is dropped. Each component is a plain name: no ``.``/``..``, no control
+    character, none of ``<>:"|?*``.
+    """
+    text = (value or "").strip().replace("/", "\\")
+    if not text:
+        return None
+    parts = text[2:].rstrip("\\").split("\\") if text.startswith("\\\\") else []
+    if len(text) > MAX_UNC or len(parts) < 2 or any(not _unc_component(p) for p in parts):
+        raise ValueError("caminho de rede inválido")
+    return "\\\\" + "\\".join(parts)
+
+
+def _unc_component(part: str) -> bool:
+    return (
+        bool(part.strip())
+        and part not in {".", ".."}
+        and not any(c in _UNC_FORBIDDEN or unicodedata.category(c).startswith("C") for c in part)
+    )
+
+
 def create_root(
     session: Session,
     *,
     caminho: str,
     descricao: str | None = None,
+    unc: str | None = None,
     is_mount_point: MountPredicate = default_is_mount_point,
     actor: str,
 ) -> Root:
@@ -469,6 +499,7 @@ def create_root(
     (for instance of a failed import).
     """
     description = _description(descricao)
+    network = root_unc(unc)
     try:
         path = _checked_root_path(caminho, is_mount_point=is_mount_point)
         _open_as_the_courier_would(path)
@@ -491,10 +522,19 @@ def create_root(
     _audit_on_its_own(
         session, actor, "root.probe", "root", "ok", probe="ok", efeito="arquivo criado e removido"
     )
-    root = Root(caminho=str(path), descricao=description)
+    root = Root(caminho=str(path), descricao=description, unc=network)
     session.add(root)
     session.flush()
-    _audit(session, actor, "root.create", "root", root.id, probe="ok")
+    _audit(session, actor, "root.create", "root", root.id, probe="ok", unc=network is not None)
+    return root
+
+
+def set_root_unc(session: Session, root_id: int, unc: str | None, *, actor: str) -> Root:
+    """Set or clear the network path of a root; nothing on disk changes."""
+    root = _fetch(session, Root, root_id, "raiz")
+    root.unc = root_unc(unc)
+    session.flush()
+    _audit(session, actor, "root.unc", "root", root.id, unc=root.unc is not None)
     return root
 
 

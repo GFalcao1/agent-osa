@@ -142,6 +142,9 @@ class Root(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     caminho: Mapped[str] = mapped_column(Text, unique=True)
     descricao: Mapped[str | None] = mapped_column(Text)
+    # How the users' computers reach this root on the network (``\\servidor\acervo``), for
+    # answers that point to a file instead of sending it (TASK-110). Optional.
+    unc: Mapped[str | None] = mapped_column(Text)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     # Scan progress (TASK-109): a scan in progress has ``scan_iniciado_em`` and the last
     # root-relative path it committed; a finished one clears both and sets ``ultimo_scan``.

@@ -48,6 +48,7 @@ def create_root(
     request: Request,
     caminho: Text = "",
     descricao: Text = "",
+    unc: Text = "",
     session: Session = Depends(get_session),
 ) -> Response:
     is_mount_point = request.app.state.is_mount_point
@@ -57,12 +58,27 @@ def create_root(
             session,
             caminho=caminho,
             descricao=descricao,
+            unc=unc,
             is_mount_point=is_mount_point,
             actor=ACTOR,
         ),
         done="/roots",
         fail=lambda message, status: _page(request, session, error=message, status=status),
         saved="raiz-cadastrada",
+    )
+
+
+@router.post("/roots/{root_id}/unc")
+def set_root_unc(
+    request: Request, root_id: int, unc: Text = "", session: Session = Depends(get_session)
+) -> Response:
+    return mutate(
+        session,
+        lambda: services.set_root_unc(session, root_id, unc, actor=ACTOR),
+        done="/roots",
+        fail=lambda message, status: _page(request, session, error=message, status=status),
+        saved="rede-salva",
+        ref=root_id,
     )
 
 

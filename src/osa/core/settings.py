@@ -175,7 +175,8 @@ class Settings(BaseSettings):
         ".crt",
     )
     quarantine_dir: Path | None = None
-    telegram_send_limit_mb: int = Field(default=50, ge=1)
+    # The Bot API refuses uploads above 50 MB: a larger setting would only make sends fail.
+    telegram_send_limit_mb: int = Field(default=50, ge=1, le=50)
 
     def __init__(self, **values: Any) -> None:
         """Validate settings without retaining raw inputs in error output."""

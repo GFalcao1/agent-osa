@@ -18,6 +18,7 @@ import threading
 import uuid
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Protocol, cast
 
 from sqlalchemy.orm import Session
 
@@ -27,29 +28,66 @@ from osa.courier import owners as courier_owners
 from osa.courier import review as courier_review
 from osa.courier.intake import Intake, quarantine_suffix, stage_upload
 from osa.courier.owners import OwnerRequest
-from osa.courier.pipeline import ALVO, Archived, Duplicate, Failed, Outcome, process
-from osa.courier.ports import ClassifyPort, ContentPort, FsPort, LocalContent, LocalFs
+from osa.courier.pipeline import (
+    ALVO,
+    MOTIVO_SENSIVEL,
+    Archived,
+    Duplicate,
+    Failed,
+    Outcome,
+    process,
+)
+from osa.courier.ports import (
+    ClassifyPort,
+    ContentPort,
+    FsPort,
+    LocalContent,
+    LocalFs,
+    read_within,
+)
 from osa.courier.review import LeftAtOrigin
 from osa.courier.store import SqlStore
 from osa.courier.undo import UndoResult, undo_operation
-from osa.db.audit import RESULT_DENIED, record_event
-from osa.db.models import Department, Owner, ReviewCase, User
-from osa.domain.document import DocumentState, Origin
-from osa.domain.errors import Conflict
+from osa.db.audit import RESULT_DENIED, RESULT_FAILED, RESULT_OK, record_event
+from osa.db.models import Department, Document, Owner, ReviewCase, User
+from osa.domain.document import DocumentState, FileClass, Origin
+from osa.domain.errors import Conflict, DomainError
 from osa.domain.owner import normalize_text
 from osa.domain.user import Role
+from osa.extract.classify import class_by_name
 from osa.extract.model import ExtractLimits
+from osa.llm.envelopes import Department as DepartmentSpec
+from osa.llm.envelopes import DepartmentInput, IntentEnvelope, QueryEnvelope
+from osa.llm.provider import ExternalNotConfigured
+from osa.search import intent
+from osa.search.service import SearchLimits, filters_for, run_search
 from osa.telegram.ports import (
     Actor,
     CaseInfo,
     DepartmentInfo,
     DocumentInfo,
+    FileToSend,
+    HitInfo,
     OwnerInfo,
+    PathToShow,
     RootSpace,
+    SearchResult,
+    SendPlan,
+    SendRefused,
     StatusInfo,
+    Understood,
 )
 
 MIN_SIMILARITY = 0.55
+ACAO_ENVIO = "document.send"
+MOTIVO_SEM_ARQUIVO = "o documento não tem arquivo no servidor"
+MOTIVO_SUMIU = "o arquivo não está mais no caminho registrado"
+MOTIVO_MUDOU = "o arquivo no servidor mudou desde o registro"
+MOTIVO_RAIZ_INATIVA = "a raiz do documento está inativa"
+
+
+class InterpretPort(Protocol):
+    def interpret(self, text: str, departments: Sequence[DepartmentInput]) -> IntentEnvelope: ...
 
 
 class RealCourier:
@@ -61,6 +99,7 @@ class RealCourier:
         fs: FsPort | None = None,
         content: ContentPort | None = None,
         llm: ClassifyPort | None = None,
+        query_llm: InterpretPort | None = None,
     ) -> None:
         self._sessions = session_factory
         self.settings = settings
@@ -72,6 +111,7 @@ class RealCourier:
         self._llm_fixed = llm is not None
         self._llm_config: tuple[str, str | None] | None = None
         self._llm_lock = threading.Lock()
+        self._query_llm = query_llm
 
     # --- registry -----------------------------------------------------------------------
 
@@ -320,7 +360,7 @@ class RealCourier:
                     free: int | None = shutil.disk_usage(root.caminho).free
                 except OSError:
                     free = None
-                roots.append(RootSpace(root.caminho, free))
+                roots.append(RootSpace(root.caminho, free, root.ultimo_scan))
             return StatusInfo(
                 documentos=store.documents_by_state(),
                 revisoes_abertas=len(store.open_review_cases()),
@@ -329,6 +369,201 @@ class RealCourier:
                 efeitos=self.settings.enable_file_effects,
                 raizes=tuple(roots),
             )
+
+    # --- query and send (TASK-110) -------------------------------------------------------------
+
+    def _interpreter(self, session: Session) -> InterpretPort:
+        if self._query_llm is not None:
+            return self._query_llm
+        config = services.effective_model_config(session, self.settings)
+        if config.provedor_externo_ativo:
+            # No external transport exists in this version: no silent fallback to local.
+            raise ExternalNotConfigured(
+                "provedor externo ligado sem transporte configurado: desligue-o no painel"
+            )
+        return cast(InterpretPort, self._provider(session))
+
+    def interpret(self, text: str) -> IntentEnvelope:
+        with self._sessions() as session:
+            specs = [DepartmentSpec(d.nome, d.descricao) for d in SqlStore(session).template()]
+            interpreter = self._interpreter(session)
+        return interpreter.interpret(text, specs)
+
+    def search(self, query: QueryEnvelope, *, actor: Actor) -> SearchResult:
+        with self._sessions() as session:
+            store = SqlStore(session)
+            filters = filters_for(session, query)
+            limits = SearchLimits(
+                max_hits=intent.SEARCH_LIMIT,
+                sensitive_extensions=tuple(self.settings.sensitive_extensions),
+            )
+            hits = [] if filters.unresolved else run_search(session, filters, limits)
+            owners = {o.id: o.nome_fantasia for o in store.active_owners()}
+            departments = {d.id: d.nome for d in store.template()}
+            understood = Understood(
+                dono_id=filters.owner_id,
+                dono=owners.get(filters.owner_id) if filters.owner_id is not None else None,
+                dono_desconhecido=filters.owner_unresolved,
+                departamento_id=filters.department_id,
+                departamento=departments.get(filters.department_id)
+                if filters.department_id is not None
+                else None,
+                departamento_desconhecido=filters.department_unresolved,
+                tipo_documental=filters.tipo_documental,
+                periodo_inicio=filters.periodo_inicio,
+                periodo_fim=filters.periodo_fim,
+                palavras_chave=filters.terms,
+            )
+            store.audit(
+                ator=actor.actor,
+                acao="query.search",
+                alvo_tipo="query",
+                alvo_id=None,
+                sha256=None,
+                resultado=RESULT_OK,
+                detalhes={
+                    **understood.as_audit(),
+                    "resultados": len(hits),
+                    "mais_que_o_limite": len(hits) >= intent.SEARCH_LIMIT,
+                },
+            )
+            store.commit()
+            return SearchResult(
+                tuple(
+                    HitInfo(
+                        document_id=hit.document_id,
+                        nome=hit.nome or hit.caminho.rsplit("/", 1)[-1],
+                        dono=owners.get(hit.owner_id) if hit.owner_id is not None else None,
+                        departamento=departments.get(hit.departamento_id)
+                        if hit.departamento_id is not None
+                        else None,
+                        ano=hit.ano,
+                        tipo_documental=hit.tipo_documental,
+                        sensivel=hit.sensivel,
+                    )
+                    for hit in hits
+                ),
+                understood,
+            )
+
+    def prepare_send(
+        self, document_id: int, *, actor: Actor, consulta: dict[str, object]
+    ) -> SendPlan:
+        """The delivery of one document (SPEC §5-B step 4); never reads a sensitive file."""
+        limit = self.settings.telegram_send_limit_mb * 1024 * 1024
+        with self._sessions() as session:
+            store = SqlStore(session)
+            document = store.document(document_id)
+
+            def refuse(motivo: str, resultado: str = RESULT_FAILED) -> SendRefused:
+                self._audit_send(store, document, actor, consulta, "recusado", resultado, motivo)
+                return SendRefused(motivo)
+
+            if document.caminho is None or document.root_id is None or document.ausente_em:
+                return refuse(MOTIVO_SEM_ARQUIVO)
+            root = store.root(document.root_id)
+            if not root.ativo:
+                return refuse(MOTIVO_RAIZ_INATIVA)
+            # Sensitive by the indexed name, the path's name or the record itself (a ``.pfx``
+            # renamed on the share keeps its marker). Decided before any disk access, so a
+            # refused operator learns nothing about the file.
+            sensitive = self._is_sensitive(document, document.caminho.rsplit("/", 1)[-1])
+            if sensitive and not actor.is_admin:
+                return refuse(intent.MOTIVO_SENSIVEL, RESULT_DENIED)
+            try:
+                path = self.fs.locate(Path(root.caminho), document.caminho)
+                size = os.stat(path, follow_symlinks=False).st_size
+            except (DomainError, OSError):
+                return refuse(MOTIVO_SUMIU)
+            sensitive = sensitive or self._is_sensitive(document, path.name)
+            decision = intent.delivery(
+                sensitive=sensitive, size=size, limit_bytes=limit, is_admin=actor.is_admin
+            )
+            if decision.how == "recusado":
+                assert decision.motivo is not None
+                return refuse(decision.motivo, RESULT_DENIED)
+            if decision.how == "caminho":
+                assert decision.motivo is not None
+                where = intent.network_path(root.unc, root.caminho, document.caminho)
+                self._audit_send(
+                    store, document, actor, consulta, "caminho", RESULT_OK, decision.motivo
+                )
+                return PathToShow(where, decision.motivo)
+            try:
+                data, sha256 = read_within(Path(root.caminho), document.caminho, max_bytes=limit)
+            except (DomainError, OSError):
+                return refuse(MOTIVO_SUMIU)
+            if sha256 != document.sha256:
+                return refuse(MOTIVO_MUDOU)
+            # The attempt is on record before a byte leaves (like the external provider): a
+            # trail that cannot be written means no send; the result follows ``record_send``.
+            self._audit_send(
+                store, document, actor, consulta, "arquivo", RESULT_FAILED, None,
+                fase="tentativa",
+            )  # fmt: skip
+            name = document.nome or document.caminho.rsplit("/", 1)[-1]
+            return FileToSend(name, data, sha256)
+
+    def _is_sensitive(self, document: Document, *names: str) -> bool:
+        if document.motivo == MOTIVO_SENSIVEL:
+            return True
+        return any(
+            class_by_name(name, self.settings.sensitive_extensions) is FileClass.SENSITIVE
+            for name in (document.nome or "", *names)
+            if name
+        )
+
+    def record_send(
+        self,
+        document_id: int,
+        *,
+        actor: Actor,
+        consulta: dict[str, object],
+        ok: bool,
+        erro: str | None = None,
+    ) -> None:
+        with self._sessions() as session:
+            store = SqlStore(session)
+            document = store.document(document_id)
+            self._audit_send(
+                store, document, actor, consulta, "arquivo", RESULT_OK if ok else RESULT_FAILED,
+                erro,
+            )  # fmt: skip
+
+    @staticmethod
+    def _audit_send(
+        store: SqlStore,
+        document: Document,
+        actor: Actor,
+        consulta: dict[str, object],
+        entrega: str,
+        resultado: str,
+        motivo: str | None,
+        *,
+        fase: str = "resultado",
+    ) -> None:
+        """Who asked, the query, the hash, the path and the result (SPEC §5-B step 5).
+
+        A file send is two events: ``fase = tentativa`` before the bytes leave (stored as
+        ``failed``: the table has no "pending") and ``fase = resultado`` after.
+        """
+        store.audit(
+            ator=actor.actor,
+            acao=ACAO_ENVIO,
+            alvo_tipo=ALVO,
+            alvo_id=document.id,
+            sha256=document.sha256,
+            resultado=resultado,
+            detalhes={
+                "consulta": consulta,
+                "caminho": document.caminho,
+                "root_id": document.root_id,
+                "entrega": entrega,
+                "motivo": motivo,
+                "fase": fase,
+            },
+        )
+        store.commit()
 
 
 # --- row to info ----------------------------------------------------------------------------

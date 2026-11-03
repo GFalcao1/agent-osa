@@ -25,6 +25,7 @@ from sqlalchemy import Select, and_, func, literal, or_, select, text
 from sqlalchemy.orm import Session
 
 from osa.courier import owners as owners_module
+from osa.courier.pipeline import MOTIVO_SENSIVEL
 from osa.db.models import Department, Document, Owner
 from osa.domain.document import FileClass
 from osa.extract.classify import class_by_name
@@ -274,7 +275,10 @@ def run_search(session: Session, filters: Filters, limits: SearchLimits) -> list
                 resumo=document.resumo,
                 datas=tuple(document.datas),
                 estado=document.estado,
-                sensivel=class_by_name(name, limits.sensitive_extensions) is FileClass.SENSITIVE,
+                # By name, or by the record: a sensitive file renamed on the share keeps the
+                # marker the scan or the courier gave it.
+                sensivel=document.motivo == MOTIVO_SENSIVEL
+                or class_by_name(name, limits.sensitive_extensions) is FileClass.SENSITIVE,
                 rank=float(rank or 0.0),
             )
         )

@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Coroutine, Sequence
 from typing import Any
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
 from telegram.error import BadRequest
 from telegram.ext import (
     Application,
@@ -28,7 +28,7 @@ from telegram.ext import (
 from osa.core.logging import configure_logging, get_logger, log_context
 from osa.core.settings import Settings
 from osa.telegram import auth, jobs
-from osa.telegram.handlers import admin, owners, review, upload
+from osa.telegram.handlers import admin, owners, query, review, upload
 from osa.telegram.ports import (
     BotContext,
     BotPort,
@@ -45,8 +45,10 @@ log = get_logger("osa.telegram")
 
 # 9h in this machine's time zone (the job queue would otherwise read a naive time as UTC).
 REMINDER_TIME = datetime.time(hour=9, minute=0, tzinfo=datetime.datetime.now().astimezone().tzinfo)
-COMMANDS = ("start", "status", "desfazer", "pendentes")
+COMMANDS = ("start", "ajuda", "status", "desfazer", "pendentes")
 CALL_TIMEOUT = 120.0
+UPLOAD_BASE_S = 30.0
+UPLOAD_BYTES_PER_S = 128 * 1024  # a slow uplink: 50 MB in under 7 minutes
 
 
 class PtbBot:
@@ -92,6 +94,26 @@ class PtbBot:
     def download(self, file_id: str) -> bytes:
         file = self._run(self._application.bot.get_file(file_id))
         return bytes(self._run(file.download_as_bytearray()))
+
+    def send_document(
+        self, chat_id: int, data: bytes, filename: str, caption: str | None = None
+    ) -> int:
+        # The default write timeout (20 s) is short for tens of MB: size it to the file, and
+        # wait for the coroutine a little longer, so "failed" is never written for an upload
+        # that is still under way.
+        write_timeout = UPLOAD_BASE_S + len(data) / UPLOAD_BYTES_PER_S
+        future = asyncio.run_coroutine_threadsafe(
+            self._application.bot.send_document(
+                chat_id=chat_id,
+                document=InputFile(data, filename=filename),
+                caption=caption,
+                disable_content_type_detection=True,
+                write_timeout=write_timeout,
+            ),
+            self._loop,
+        )
+        message = future.result(timeout=write_timeout + CALL_TIMEOUT)
+        return int(message.message_id)
 
 
 def _markup(buttons: Keyboard) -> InlineKeyboardMarkup | None:
@@ -206,7 +228,7 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if message is None or message.text is None or user is None or chat is None:
         return
     event = IncomingText(chat.id, user.id, message.message_id, message.text)
-    await _in_thread(upload.handle_text, _ctx(context), event)
+    await _in_thread(query.handle_text, _ctx(context), event)
 
 
 async def _on_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -241,6 +263,8 @@ def dispatch_callback(ctx: BotContext, event: Callback) -> None:
         owners.handle_owner_callback(ctx, event)
     elif event.data.startswith(review.PREFIX):
         review.handle_review_callback(ctx, event)
+    elif event.data.startswith(query.PREFIX):
+        query.handle_query_callback(ctx, event)
     else:
         ctx.bot.answer(event.callback_id)
 

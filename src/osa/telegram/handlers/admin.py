@@ -1,4 +1,5 @@
-"""Commands: ``/status`` and ``/desfazer`` for the administrator, ``/pendentes`` for reviewers."""
+"""Commands: ``/status`` and ``/desfazer`` for the administrator, ``/pendentes`` for reviewers,
+``/start`` and ``/ajuda`` for everyone."""
 
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ def handle_command(ctx: BotContext, cmd: IncomingCommand) -> None:
     if actor is None:
         return
     if cmd.name == "status":
-        _status(ctx, actor, cmd)
+        send_status(ctx, actor, cmd.chat_id)
     elif cmd.name == "desfazer":
         _undo(ctx, actor, cmd)
     elif cmd.name == "pendentes":
@@ -35,13 +36,17 @@ def handle_command(ctx: BotContext, cmd: IncomingCommand) -> None:
     elif cmd.name == "start":
         ctx.bot.send(
             cmd.chat_id,
-            f"Olá, {actor.nome}. Envie um documento como arquivo e diga de quem ele é na legenda.",
+            f"Olá, {actor.nome}. Envie um documento como arquivo e diga de quem ele é na "
+            "legenda, ou escreva o que procura. /ajuda mostra o que eu faço.",
         )
+    elif cmd.name == "ajuda":
+        ctx.bot.send(cmd.chat_id, texts.HELP)
 
 
-def _status(ctx: BotContext, actor: Actor, cmd: IncomingCommand) -> None:
+def send_status(ctx: BotContext, actor: Actor, chat_id: int) -> None:
+    """``/status`` (and "como está o sistema?"): only for the administrator."""
     if not actor.is_admin:
-        ctx.bot.send(cmd.chat_id, texts.ONLY_ADMIN)
+        ctx.bot.send(chat_id, texts.ONLY_ADMIN)
         return
     info = ctx.courier.status()
     counts = ", ".join(
@@ -54,15 +59,19 @@ def _status(ctx: BotContext, actor: Actor, cmd: IncomingCommand) -> None:
             if root.livre_bytes is not None
             else "sem medida"
         )
+        + (
+            f", último scan {root.ultimo_scan.astimezone():%d/%m/%Y %H:%M}"
+            if root.ultimo_scan is not None
+            else ", nunca varrida"
+        )
         for root in info.raizes
     )
     ctx.bot.send(
-        cmd.chat_id,
+        chat_id,
         f"Fila: {counts}.\n"
         f"Revisões abertas: {info.revisoes_abertas}.\n"
         f"Modelo: {info.modelo}" + (f" ({info.digest[:12]}…)" if info.digest else "") + ".\n"
         f"Efeitos de arquivo: {'ligados' if info.efeitos else 'desligados'}.\n"
-        "Último scan: ainda não há scan nesta versão.\n"
         f"Raízes:\n{roots or '- nenhuma ativa'}",
     )
 

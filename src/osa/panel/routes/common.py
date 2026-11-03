@@ -59,6 +59,7 @@ FLASHES: Final = {
     "raiz-cadastrada": Flash("Raiz ", " cadastrada.", Root, "caminho"),
     "raiz-ativada": Flash("Raiz ", " ativada.", Root, "caminho"),
     "raiz-desativada": Flash("Raiz ", " desativada.", Root, "caminho"),
+    "rede-salva": Flash("Caminho de rede da raiz ", " salvo.", Root, "caminho"),
     "pasta-adicionada": Flash("Pasta monitorada ", " adicionada.", WatchedFolder, "caminho"),
     "pasta-ativada": Flash("Pasta monitorada ", " ativada.", WatchedFolder, "caminho"),
     "pasta-desativada": Flash("Pasta monitorada ", " desativada.", WatchedFolder, "caminho"),

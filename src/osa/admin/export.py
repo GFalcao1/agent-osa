@@ -55,6 +55,7 @@ class WatchedEntry(_Entry):
 class RootEntry(_Entry):
     caminho: str
     descricao: str | None = None
+    unc: str | None = None
     ativo: bool = True
     pastas_monitoradas: list[WatchedEntry] = []
 
@@ -293,6 +294,7 @@ def registry_from_session(session: Session) -> Registry:
             RootEntry(
                 caminho=r.caminho,
                 descricao=r.descricao,
+                unc=r.unc,
                 ativo=r.ativo,
                 pastas_monitoradas=watched.get(r.id, []),
             )
@@ -428,6 +430,7 @@ def import_registry(
             session,
             caminho=root_entry.caminho,
             descricao=root_entry.descricao,
+            unc=root_entry.unc,
             is_mount_point=is_mount_point,
             actor=actor,
         )

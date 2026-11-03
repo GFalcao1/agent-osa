@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from osa.domain.document import FileClass
-from osa.domain.errors import UnsafePath
+from osa.domain.errors import DomainError, UnsafePath
 from osa.extract.classify import class_by_name
 from osa.extract.model import ExtractLimits
 
@@ -113,6 +113,53 @@ def sha256_of_file(path: Path) -> str:
     finally:
         os.close(fd)
     return digest.hexdigest()
+
+
+def read_within(root: Path, relative: str, *, max_bytes: int) -> tuple[bytes, str]:
+    """Bytes and sha256 of ``relative`` inside ``root``, at most ``max_bytes``.
+
+    Opened from the root's descriptor, component by component, without following a link in
+    any of them (``open_root``/``open_beneath``), so a folder swapped for a link after the
+    check cannot lead outside the root. For a document sent through Telegram: the caller
+    compares the hash with the index, so a file replaced on the share is never sent under
+    the record's name. Any I/O failure is ``UnsafePath``.
+    """
+    from osa.fs.roots import find_entry, open_beneath, open_root, relative_parts
+
+    parts = relative_parts(root, relative)
+    if not parts:
+        raise UnsafePath("caminho vazio")
+    try:
+        with open_root(root) as root_fd, open_beneath(root_fd, parts[:-1]) as parent:
+            entry = find_entry(parent.fd, parts[-1])
+            if entry is None:
+                raise UnsafePath("arquivo não existe")
+            fd = os.open(entry, _READ_FLAGS, dir_fd=parent.fd)
+            return _read_fd(fd, max_bytes)
+    except DomainError:
+        raise
+    except OSError:
+        raise UnsafePath("arquivo ilegível") from None
+
+
+def _read_fd(fd: int, max_bytes: int) -> tuple[bytes, str]:
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise UnsafePath("não é um arquivo comum")
+        if info.st_size > max_bytes:
+            raise UnsafePath("arquivo maior que o limite de envio")
+        chunks: list[bytes] = []
+        total = 0
+        while chunk := os.read(fd, _CHUNK):
+            total += len(chunk)
+            if total > max_bytes:
+                raise UnsafePath("arquivo maior que o limite de envio")
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+    data = b"".join(chunks)
+    return data, hashlib.sha256(data).hexdigest()
 
 
 class LocalContent:

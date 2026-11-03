@@ -1,4 +1,8 @@
-"""The two envelopes the model returns (spec §8) and the schema sent in ``format``.
+"""The envelopes the model returns (spec §8) and the schema sent in ``format``.
+
+Classification describes a document; the intent envelope (TASK-110) says what an operator's
+message asks for: an ``acao`` and the query fields, flat on the wire (the spec forbids
+``$ref``) and nested in code (``IntentEnvelope.consulta``).
 
 The base classes are static for typing; the department enum is built at each call from the
 template's active departments, so a stale enum cannot exist. The schema sent to Ollama is
@@ -125,6 +129,47 @@ class QueryEnvelope(BaseModel):
         return self
 
 
+#: What an operator's message can ask for; each one is dispatched by code (TASK-110).
+ACOES: tuple[str, ...] = ("buscar", "listar_donos", "listar_departamentos", "status", "ajuda")
+Acao = Literal["buscar", "listar_donos", "listar_departamentos", "status", "ajuda"]
+
+
+class IntentEnvelope(BaseModel):
+    """What the model says a message asks for: the action and, for a search, the query.
+
+    The fields after ``acao`` are the query envelope's, in the same order: the wire schema
+    stays flat (no ``$ref``) and ``consulta`` gives the nested query to the search.
+    """
+
+    model_config = _STRICT
+
+    acao: Acao
+    dono: Annotated[str, Field(min_length=1, max_length=MAX_DONO)] | None
+    departamento: str | None
+    tipo_documental: Annotated[str, Field(min_length=1, max_length=MAX_TIPO)] | None
+    periodo_inicio: date | None
+    periodo_fim: date | None
+    palavras_chave: Annotated[list[_Tag], Field(max_length=MAX_PALAVRAS)]
+
+    @model_validator(mode="after")
+    def _ordered_period(self) -> Self:
+        if self.periodo_inicio and self.periodo_fim and self.periodo_inicio > self.periodo_fim:
+            raise ValueError("periodo_inicio must not be after periodo_fim")
+        return self
+
+    @property
+    def consulta(self) -> QueryEnvelope:
+        """The query part, as the search takes it."""
+        return QueryEnvelope(
+            dono=self.dono,
+            departamento=self.departamento,
+            tipo_documental=self.tipo_documental,
+            periodo_inicio=self.periodo_inicio,
+            periodo_fim=self.periodo_fim,
+            palavras_chave=list(self.palavras_chave),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class Department:
     """A template department as the model sees it: the enum name and an optional description.
@@ -208,6 +253,15 @@ def _query(names: tuple[str, ...]) -> type[QueryEnvelope]:
     )
 
 
+@lru_cache(maxsize=32)
+def _intent(names: tuple[str, ...]) -> type[IntentEnvelope]:
+    return create_model(
+        "IntentEnvelope",
+        __base__=IntentEnvelope,
+        departamento=(_literal(names) | None, ...),
+    )
+
+
 def classification_envelope(
     departments: Sequence[DepartmentInput],
 ) -> type[ClassificationEnvelope]:
@@ -217,6 +271,11 @@ def classification_envelope(
 
 def query_envelope(departments: Sequence[DepartmentInput]) -> type[QueryEnvelope]:
     return _query(validate_departments(departments))
+
+
+def intent_envelope(departments: Sequence[DepartmentInput]) -> type[IntentEnvelope]:
+    """The intent envelope whose department field takes exactly these names (or null)."""
+    return _intent(validate_departments(departments))
 
 
 class _WireSchema(GenerateJsonSchema):

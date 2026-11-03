@@ -1286,8 +1286,9 @@ def seed_installation(session: Session, tmp_path: Path) -> None:
     base = make_root_dir(tmp_path, "raiz-ficticia")
     (base / "entrada").mkdir()
     root = services.create_root(
-        session, caminho=str(base), descricao="Raiz de teste", is_mount_point=mounted, actor=ACTOR
-    )
+        session, caminho=str(base), descricao="Raiz de teste", unc="\\\\srv\\acervo",
+        is_mount_point=mounted, actor=ACTOR,
+    )  # fmt: skip
     services.create_watched_folder(session, root_id=root.id, caminho="entrada", actor=ACTOR)
     fiscal = services.create_department(
         session, nome="Fiscal", usa_ano=True, descricao="Notas fiscais e guias", actor=ACTOR

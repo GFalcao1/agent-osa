@@ -26,10 +26,10 @@ from osa.domain.owner import is_valid_cnpj
 from osa.llm import prompts
 from osa.llm.envelopes import (
     DepartmentInput,
-    QueryEnvelope,
+    IntentEnvelope,
     department_specs,
+    intent_envelope,
     parse_envelope,
-    query_envelope,
     schema_hash,
     schema_json,
     wire_schema,
@@ -323,7 +323,7 @@ class ExternalQueryProvider:
         self._note(AuditRecord(ACTION_CLASSIFY, "denied", {"motivo": "classe_documento"}))
         raise ExternalClassifyRefused("conteúdo de documento não sai da máquina")
 
-    def interpret(self, text: str, departments: Sequence[DepartmentInput]) -> QueryEnvelope:
+    def interpret(self, text: str, departments: Sequence[DepartmentInput]) -> IntentEnvelope:
         transport = self._transport
         if not self._enabled or transport is None:
             raise ExternalDisabled("provedor externo desligado")
@@ -338,7 +338,7 @@ class ExternalQueryProvider:
         rendered = prompts.render_query(
             masked, names, today=self._today(), nonce_factory=self._nonce_factory, max_chars=None
         )
-        model = query_envelope(names)
+        model = intent_envelope(names)
         schema = wire_schema(model)
         payload = "\n".join((rendered.system, rendered.user, schema_json(schema)))
         leak = find_leak(payload, owners)
@@ -358,7 +358,7 @@ class ExternalQueryProvider:
         # means no call at all.
         self._write(AuditRecord(ACTION_INTERPRET, "tentativa", details))
         started = time.perf_counter()
-        envelope: QueryEnvelope | None = None
+        envelope: IntentEnvelope | None = None
         failure: LLMError | None = None
         phase: str | None = None
         error_type: str | None = None
@@ -405,7 +405,7 @@ class ExternalQueryProvider:
             pass  # a block is a block even if it could not be written down
 
     @staticmethod
-    def _resolve(envelope: QueryEnvelope, owners: Sequence[OwnerNames]) -> QueryEnvelope:
+    def _resolve(envelope: IntentEnvelope, owners: Sequence[OwnerNames]) -> IntentEnvelope:
         """``dono:<id>`` back to the canonical name, locally; unknown ids are dropped."""
         labels = {owner.id: owner.rotulo for owner in owners}
 
