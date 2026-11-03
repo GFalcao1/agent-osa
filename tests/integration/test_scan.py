@@ -269,9 +269,7 @@ def test_audit_trail_of_one_scanned_document_never_carries_text(
     inst = installation
     inst.scan()
     doc = inst.by_path("Alfa Comércio/01 Fiscal/2025/boleto.pdf")
-    events = [
-        e for e in inst.events() if e.alvo_tipo == "document" and e.alvo_id == str(doc.id)
-    ]
+    events = [e for e in inst.events() if e.alvo_tipo == "document" and e.alvo_id == str(doc.id)]
 
     assert [e.acao for e in events] == [
         "document.detect", "document.extract", "document.classify", "document.index"
