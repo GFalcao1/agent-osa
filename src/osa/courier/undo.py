@@ -9,6 +9,7 @@ history stays append-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from osa.courier.ports import FsPort
@@ -133,6 +134,7 @@ def _back_at_origin(
         )
     )
     document.caminho = destino
+    document.visto_em = datetime.now(UTC)  # a scan in progress must not take it for absent
     document.estado = DocumentState.NA_ORIGEM.value
     document.motivo = (
         f"desfeito com identidade alterada: operação {operation.id}"

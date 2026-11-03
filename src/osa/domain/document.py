@@ -18,6 +18,19 @@ class DocumentState(StrEnum):
     FALHOU = "FALHOU"
 
 
+class WatchState(StrEnum):
+    """What the worker knows of a file in a watched folder (TASK-111).
+
+    ``DETECTADO``: seen, maybe still copying; ``ESTAVEL``: unchanged for the required cycles
+    and old enough, about to be read; ``PROCESSADO``: the courier ran on it (the document id
+    says the outcome) and it is skipped while its size and mtime stay the same.
+    """
+
+    DETECTADO = "DETECTADO"
+    ESTAVEL = "ESTAVEL"
+    PROCESSADO = "PROCESSADO"
+
+
 class Origin(StrEnum):
     TELEGRAM = "telegram"
     WATCHED = "watched"

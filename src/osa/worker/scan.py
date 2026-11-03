@@ -27,6 +27,7 @@ from osa.core.logging import get_logger, log_context
 from osa.courier.decision import MOTIVO_ENVELOPE_INVALIDO, TemplateDepartment
 from osa.courier.pipeline import (
     ALVO,
+    MOTIVO_MODELO_INDISPONIVEL,
     MOTIVO_SENSIVEL,
     ConfigurationError,
     audit_reason,
@@ -47,7 +48,7 @@ from osa.domain.errors import (
     Unsupported,
 )
 from osa.fs.names import component_key, nfc
-from osa.fs.walk import FileEntry, SkippedDir
+from osa.fs.walk import FileEntry, SkippedDir, prune_key
 from osa.llm.envelopes import ClassificationEnvelope
 from osa.llm.envelopes import Department as DepartmentSpec
 from osa.llm.provider import EnvelopeInvalid, InvalidDepartments, LLMError
@@ -91,6 +92,11 @@ class ScanOptions:
     since: datetime | None = None
     resume: bool = True
     batch_size: int = 50
+    #: Stop (resumable) after this many documents went to the model, or this many files were
+    #: visited (each one hashed), in this call; the worker's periodic rescan uses both so
+    #: watching never waits for a whole archive.
+    max_indexed: int | None = None
+    max_visited: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +197,7 @@ class _Run:
     started: datetime
     summary: ScanSummary
     batch_size: int = 50
+    watched: tuple[str, ...] = ()  # watched folders of the root: the worker's, never scanned
     pending: int = 0  # unchanged files seen since the last commit
     before: str | None = None  # the cursor before the file in progress (where a stop resumes)
 
@@ -211,6 +218,8 @@ class _Run:
         )
 
     def audit_root(self, acao: str, resultado: str, **detalhes: Any) -> None:
+        if acao == "scan.skip":
+            self.root.scan_pulou = True  # kept on the root across the parts of the scan
         self.store.audit(
             ator=self.actor,
             acao=acao,
@@ -258,6 +267,23 @@ def scan_root(
     root = store.root(root_id)
     if not root.ativo:
         raise Conflict("raiz inativa")
+    with store.scan_lock(root.id) as held:
+        if not held:
+            raise Conflict("outro scan desta raiz está em andamento")
+        return _scan_held(root, store=store, fs=fs, content=content, llm=llm, actor=actor,
+                          options=options)  # fmt: skip
+
+
+def _scan_held(
+    root: Root,
+    *,
+    store: Store,
+    fs: FsPort,
+    content: ContentPort,
+    llm: ClassifyPort,
+    actor: str,
+    options: ScanOptions,
+) -> ScanSummary:
     owners = {component_key(o.pasta): o for o in store.active_owners()}
     departments_rows = list(store.template())
     departments = {component_key(d.pasta): d for d in template_of(departments_rows)}
@@ -279,10 +305,13 @@ def scan_root(
         started = now
         root.scan_iniciado_em = now
         root.scan_desde = options.since
+        root.scan_pulou = False
         root.scan_cursor = None
     run = _Run(
         store, fs, content, llm, actor, root, owners, departments, specs, started, summary,
         batch_size=max(1, options.batch_size),
+        # Every watched folder of the root, active or not: the scan never reads one.
+        watched=tuple(f.caminho for f in store.watched_folders(root.id, active_only=False)),
     )  # fmt: skip
     run.audit_root(
         "scan.start",
@@ -294,7 +323,7 @@ def scan_root(
     store.commit()
     with log_context(root_id=str(root.id)):
         try:
-            _walk(run, options)
+            paused = _walk(run, options)
         except ConfigurationError as error:
             _stop(run, str(error))
             raise
@@ -304,7 +333,15 @@ def scan_root(
         except (UnsafePath, OSError) as error:
             _stop(run, f"raiz ilegível: {error}")
             raise ScanInterrupted(f"raiz ilegível: {error}") from error
-        if options.since is None and not summary.pastas_ilegiveis and not summary.ilegiveis:
+        if paused:
+            store.commit()
+            run.audit_root("scan.pause", RESULT_OK, cursor=root.scan_cursor, **summary.as_details())
+            store.commit()
+            log.info("scan.paused", **summary.as_details())
+            return summary
+        # A skipped folder or file in this run or in an earlier part of the same scan: what
+        # the scan did not see may still be there, so nothing is marked absent.
+        if options.since is None and not root.scan_pulou:
             _mark_absent(run)
         root.scan_cursor = None
         root.scan_iniciado_em = None
@@ -345,9 +382,11 @@ def _stop(run: _Run, motivo: str) -> None:
     run.store.commit()
 
 
-def _walk(run: _Run, options: ScanOptions) -> None:
+def _walk(run: _Run, options: ScanOptions) -> bool:
+    """Walk from the cursor; True when it stopped on a budget (``max_indexed``/``max_visited``)."""
     since = options.since.timestamp() if options.since is not None else None
-    for visit in run.fs.walk(run.root_path, after=run.root.scan_cursor):
+    budget = options.max_indexed
+    for visit in run.fs.walk(run.root_path, after=run.root.scan_cursor, skip=run.watched):
         if isinstance(visit, SkippedDir):
             run.summary.pastas_ilegiveis += 1
             run.audit_root(
@@ -360,8 +399,16 @@ def _walk(run: _Run, options: ScanOptions) -> None:
             run.touch(visit.relative)
             continue
         _file(run, visit)
+        indexed = run.summary.novos + run.summary.reprocessados
+        if (budget is not None and indexed >= budget) or (
+            options.max_visited is not None and run.summary.arquivos >= options.max_visited
+        ):
+            if run.pending:
+                run.commit(run.root.scan_cursor or "")
+            return True
     if run.pending:
         run.commit(run.root.scan_cursor or "")
+    return False
 
 
 def _file(run: _Run, entry: FileEntry) -> None:
@@ -404,10 +451,15 @@ def _file(run: _Run, entry: FileEntry) -> None:
         existing.caminho = rel  # the spelling the share lists now (case, Unicode form)
         if existing.estado in REPROCESS_STATES:
             run.summary.reprocessados += 1
+            # A second model failure on the same document is the document's, not an outage:
+            # it stays FALHOU and the scan goes on instead of stopping on it forever.
+            strike = (existing.estado == DocumentState.FALHOU.value) and (
+                existing.motivo or ""
+            ).startswith(MOTIVO_MODELO_INDISPONIVEL)
             _detect(run, existing, rel, entry.name, placement, now, reprocessado=True)
             run.commit(run.before)
             with log_context(document_id=str(existing.id)):
-                _index(run, existing, path, entry.name, placement)
+                _index(run, existing, path, entry.name, placement, last_chance=strike)
             return
         run.summary.vistos += 1
         run.touch(rel)
@@ -511,7 +563,15 @@ def _detect(
     )  # fmt: skip
 
 
-def _index(run: _Run, document: Document, path: Path, name: str, placement: Placement) -> None:
+def _index(
+    run: _Run,
+    document: Document,
+    path: Path,
+    name: str,
+    placement: Placement,
+    *,
+    last_chance: bool = False,
+) -> None:
     """Text and metadata of a detected document; the final state comes from the path."""
     store, content = run.store, run.content
     if not placement.in_pattern:
@@ -569,7 +629,9 @@ def _index(run: _Run, document: Document, path: Path, name: str, placement: Plac
         _finish(run, document, placement, None)
         return
     except LLMError as error:
-        _failed(run, document, f"modelo indisponível: {error}")
+        _failed(run, document, f"{MOTIVO_MODELO_INDISPONIVEL}: {error}")
+        if last_chance:
+            return  # failed twice on this document: the scan goes on
         raise
     document.tipo_documental = envelope.tipo_documental
     document.tags = list(envelope.tags)
@@ -640,10 +702,20 @@ def _failed(run: _Run, document: Document, motivo: str) -> None:
     log.warning("scan.document_failed", motivo=motivo)
 
 
+def _inside_any(caminho: str | None, folders: Sequence[tuple[str, ...]]) -> bool:
+    if caminho is None:
+        return False
+    key = prune_key(caminho)
+    return any(key[: len(folder)] == folder for folder in folders)
+
+
 def _mark_absent(run: _Run) -> None:
     """A full scan ended: what it did not see is absent, and stays in the index (SPEC §9)."""
     now = now_utc()
+    watched = [prune_key(folder) for folder in run.watched]
     for document in run.store.unseen_documents(run.root.id, run.started):
+        if _inside_any(document.caminho, watched):
+            continue  # in a watched folder: the worker tracks it, the scan never looked
         document.ausente_em = now
         run.audit(document, "document.absent", RESULT_OK, caminho=document.caminho)
         run.summary.ausentes += 1

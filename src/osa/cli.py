@@ -592,6 +592,29 @@ def search_command(
         typer.echo(f"    {tipo_text}{ano_text}: {(hit.resumo or '').strip()[:120]}")
 
 
+@app.command("worker")
+def worker_command() -> None:
+    """Run the worker (watched folders, periodic rescan, daily reminder) until stopped.
+
+    Same as the ``osa-worker`` entrypoint. Without OSA_TELEGRAM_BOT_TOKEN the notices to the
+    reviewers are only logged.
+    """
+    from osa.core.logging import configure_logging
+    from osa.worker.app import run
+
+    settings = _settings()
+    if settings.database_url is None:
+        _fail("database is not configured: set OSA_DATABASE_URL")
+    configure_logging()
+    typer.echo(
+        "worker em polling a cada "
+        f"{settings.poll_interval_seconds} s (efeitos de arquivo "
+        f"{'ligados' if settings.enable_file_effects else 'desligados'})",
+        err=True,
+    )
+    run(settings)
+
+
 @app.command("bot")
 def bot_command() -> None:
     """Run the Telegram bot (long polling) until stopped; same as the ``osa-bot`` entrypoint."""

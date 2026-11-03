@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -70,6 +71,8 @@ log = get_logger("osa.courier")
 
 ALVO: Final = "document"
 MOTIVO_SENSIVEL: Final = "classe sensível: nunca lida"
+#: Prefix of the reason of a ``Failed`` caused by the model being away: the worker retries it.
+MOTIVO_MODELO_INDISPONIVEL: Final = "modelo indisponível"
 MOTIVO_LIVRE: Final = "motivo_livre"
 #: Reasons the audit may quote verbatim; anything else is model text and is only flagged.
 KNOWN_REASONS: Final = frozenset(
@@ -435,7 +438,7 @@ def _steps(run: _Run) -> Outcome:
     except EnvelopeInvalid as error:
         return run.review(MOTIVO_ENVELOPE_INVALIDO, None, erro=str(error))
     except LLMError as error:
-        return run.failed(f"modelo indisponível: {error}")
+        return run.failed(f"{MOTIVO_MODELO_INDISPONIVEL}: {error}")
     _apply_envelope(document, envelope)
     run.move_to(DocumentState.CLASSIFICADO)
     run.audit(
@@ -595,14 +598,16 @@ def archive_now(
             predicted = f"{dest_dir}/{nfc(original_name)}"
             return _simulated(ctx, owner, department, predicted, suffix=1)
         result = fs.archive(
-            root, source_rel, dest_dir, original_name, effects_enabled=ctx.effects_enabled
-        )
+            root, source_rel, dest_dir, original_name, effects_enabled=ctx.effects_enabled,
+            expected_sha256=document.sha256,
+        )  # fmt: skip
     except IdentityChanged as error:
         # The rename happened and the identity check came after it: no automatic rollback.
         # The move is recorded (SPEC §5-E) so the file can be found; an undo is refused by
         # the hash, because the content is not the one of the record.
         if error.destino is not None and source_rel is not None:
             document.caminho = error.destino
+            document.visto_em = datetime.now(UTC)
             store.add_operation(
                 ArchiveOperation(
                     document_id=document.id,
@@ -634,6 +639,8 @@ def archive_now(
         )
     )
     document.caminho = result.dest_rel
+    # Seen where it now is: a scan in progress must not take it for absent (TASK-109/111).
+    document.visto_em = datetime.now(UTC)
     ctx.move_to(DocumentState.ARQUIVADO)
     ctx.audit(
         "document.archive",

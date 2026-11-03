@@ -28,7 +28,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
 
-from osa.domain.document import ArchiveMode, DocumentState, Origin, ReviewState
+from osa.domain.document import ArchiveMode, DocumentState, Origin, ReviewState, WatchState
 from osa.domain.owner import ALIAS_PATTERN, CNPJ_PATTERN, normalize_alias, normalize_cnpj
 from osa.domain.user import Role
 
@@ -150,6 +150,8 @@ class Root(Base):
     # root-relative path it committed; a finished one clears both and sets ``ultimo_scan``.
     scan_iniciado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scan_desde: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The scan in progress skipped a folder or a file (TASK-111): it marks nothing absent.
+    scan_pulou: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     scan_cursor: Mapped[str | None] = mapped_column(Text)
     ultimo_scan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -214,6 +216,36 @@ class Document(Base):
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class WatchEntry(Base):
+    """One file a watched folder showed: what each cycle saw, until it leaves the folder.
+
+    Not an index row: a file still copying has no hash. ``document_id`` is set once the
+    courier processed the file (TASK-111).
+    """
+
+    __tablename__ = "watch_entries"
+    __table_args__ = (
+        UniqueConstraint("watched_folder_id", "caminho"),
+        values_check("estado", WatchState, "estado"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    watched_folder_id: Mapped[int] = mapped_column(ForeignKey("watched_folders.id"))
+    caminho: Mapped[str] = mapped_column(Text)  # POSIX, relative to the root
+    tamanho: Mapped[int] = mapped_column(BigInteger)
+    mtime_ns: Mapped[int] = mapped_column(BigInteger)
+    ciclos_estaveis: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    estado: Mapped[str] = mapped_column(String(16))
+    document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"))
+    tentativas: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # The outbox: a notice to the reviewers waits here until it was delivered.
+    aviso: Mapped[str | None] = mapped_column(String(16))
+    aviso_motivo: Mapped[str | None] = mapped_column(Text)
+    aviso_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    primeiro_visto: Mapped[datetime] = _now()
+    ultimo_visto: Mapped[datetime] = _now()
 
 
 class ArchiveOperation(Base):

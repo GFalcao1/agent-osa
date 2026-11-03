@@ -7,7 +7,7 @@ import re
 import sys
 from collections.abc import Iterator, Mapping, MutableMapping, Sequence
 from contextlib import contextmanager
-from typing import Any, cast
+from typing import Any, TextIO, cast
 
 import structlog
 from pydantic import AnyUrl, SecretStr
@@ -91,8 +91,22 @@ def scrub_url_credentials(
     return event_dict
 
 
+class _CurrentStderr:
+    """Whatever ``sys.stderr`` is at each write, not the one at configuration time.
+
+    A redirected or replaced stderr (a supervisor, a test runner) never leaves the logger
+    writing to a closed file.
+    """
+
+    def write(self, text: str) -> int:
+        return sys.stderr.write(text)
+
+    def flush(self) -> None:
+        sys.stderr.flush()
+
+
 def configure_logging(level: int | str = "INFO", stream: Any = None) -> None:
-    """Configure structlog to emit one JSON object per line (default: stderr)."""
+    """Configure structlog to emit one JSON object per line (default: the current stderr)."""
     structlog.configure(
         processors=[
             merge_contextvars,
@@ -106,7 +120,7 @@ def configure_logging(level: int | str = "INFO", stream: Any = None) -> None:
         wrapper_class=structlog.make_filtering_bound_logger(
             logging.getLevelNamesMapping()[level.upper()] if isinstance(level, str) else level
         ),
-        logger_factory=structlog.PrintLoggerFactory(file=stream or sys.stderr),
+        logger_factory=structlog.PrintLoggerFactory(file=stream or cast(TextIO, _CurrentStderr())),
         cache_logger_on_first_use=False,
     )
 
