@@ -1,8 +1,9 @@
 """Command line entrypoint.
 
-``config check`` reads configuration only. ``admin`` and ``panel`` manage the registry:
-heavy imports stay inside the commands so ``--version`` and ``config check`` never touch
-the database or the web stack. Errors are one line and never carry a secret or a DSN.
+``config check`` reads configuration only. ``admin`` and ``panel`` manage the registry;
+``process``, ``undo``, ``scan`` and ``search`` drive the courier and the index: heavy
+imports stay inside the commands so ``--version`` and ``config check`` never touch the
+database or the web stack. Errors are one line and never carry a secret or a DSN.
 """
 
 from __future__ import annotations
@@ -405,6 +406,190 @@ def undo_command(
             f"desfeito: documento {result.document_id} de volta em {result.destino} "
             f"(operação {result.undo_operation_id})"
         )
+
+
+def _parse_date(value: str | None, label: str) -> Any:
+    from datetime import date
+
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        _fail(f"{label} deve ser uma data AAAA-MM-DD")
+
+
+@app.command("scan")
+def scan_command(
+    raiz: list[int] | None = typer.Option(
+        None, "--raiz", help="Root id to scan; repeat for several. Default: every active root."
+    ),
+    desde: str | None = typer.Option(
+        None, "--desde", help="Only files modified on or after this date (AAAA-MM-DD)."
+    ),
+    reiniciar: bool = typer.Option(
+        False, "--reiniciar", help="Start over instead of resuming an interrupted scan."
+    ),
+) -> None:
+    """Index what is already in the roots (owner and department from the path); moves nothing.
+
+    Resumable: an interrupted scan continues from the last committed file. Exit 0 when every
+    root finished, 1 when a root could not be finished or the configuration is refused.
+    """
+    from datetime import UTC, datetime, time
+
+    from osa.admin import services
+    from osa.core.logging import configure_logging
+    from osa.courier.pipeline import ConfigurationError
+    from osa.courier.ports import LocalContent, LocalFs
+    from osa.courier.store import SqlStore
+    from osa.db.session import DatabaseNotConfigured
+    from osa.domain.errors import Conflict, DomainError
+    from osa.extract.model import ExtractLimits
+    from osa.llm.provider import build_local_provider
+    from osa.worker.scan import ScanInterrupted, ScanOptions, scan_root
+
+    settings = _settings()
+    configure_logging("WARNING")
+    since_date = _parse_date(desde, "--desde")
+    since = (
+        datetime.combine(since_date, time.min).astimezone().astimezone(UTC)
+        if since_date is not None
+        else None
+    )
+    options = ScanOptions(since=since, resume=not reiniciar)
+    fs = LocalFs()
+    content = LocalContent(ExtractLimits.from_settings(settings))
+    interrupted = False
+    try:
+        with _session_factory()() as session:
+            store = SqlStore(session)
+            roots = (
+                [store.root(root_id) for root_id in raiz] if raiz else list(store.active_roots())
+            )
+            if not roots:
+                _fail("nenhuma raiz ativa no cadastro")
+            config = services.effective_model_config(session, settings)
+            with build_local_provider(settings, config) as llm:
+                for root in roots:
+                    typer.echo(f"raiz {root.id} ({root.caminho}): varrendo", err=True)
+                    try:
+                        summary = scan_root(
+                            root.id,
+                            store=store,
+                            fs=fs,
+                            content=content,
+                            llm=llm,
+                            actor="cli:scan",
+                            options=options,
+                        )
+                    except ScanInterrupted as error:
+                        interrupted = True
+                        typer.echo(f"raiz {root.id}: interrompida: {error}", err=True)
+                        continue
+                    except Conflict as error:
+                        interrupted = True
+                        typer.echo(f"raiz {root.id}: recusada: {error}", err=True)
+                        continue
+                    typer.echo(f"raiz {root.id}: {_describe_scan(summary)}")
+    except ConfigurationError as error:
+        _fail(f"configuração recusada: {error}")
+    except (DatabaseNotConfigured, DomainError, ValueError) as error:
+        _fail(str(error))
+    except OperationalError:
+        _fail("banco de dados inacessível: confira OSA_DATABASE_URL e se o PostgreSQL está de pé")
+    except SQLAlchemyError:
+        _fail("erro de banco de dados ou esquema não migrado: rode `alembic upgrade head`")
+    if interrupted:
+        raise typer.Exit(1)
+
+
+def _describe_scan(summary: Any) -> str:
+    parts = [
+        f"{summary.arquivos} arquivos",
+        f"{summary.novos} novos",
+        f"{summary.vistos} já indexados",
+        f"{summary.reprocessados} reprocessados",
+        f"{summary.movidos} movidos",
+        f"{summary.duplicatas} duplicatas",
+        f"{summary.fora_do_padrao} fora do padrão",
+        f"{summary.sensiveis} sensíveis",
+        f"{summary.nao_suportados} não suportados",
+        f"{summary.falhas} falhas",
+        f"{summary.ausentes} ausentes",
+    ]
+    if summary.ignorados_por_data:
+        parts.append(f"{summary.ignorados_por_data} anteriores a --desde")
+    if summary.pastas_ilegiveis:
+        parts.append(f"{summary.pastas_ilegiveis} pastas ilegíveis")
+    prefix = "retomada e concluída" if summary.retomado else "concluída"
+    return f"{prefix}: " + ", ".join(parts)
+
+
+@app.command("search")
+def search_command(
+    texto: str = typer.Argument("", help="Keywords (every one must match); may be empty."),
+    dono: str | None = typer.Option(None, "--dono", help="Owner: alias, CNPJ, name or folder."),
+    departamento: str | None = typer.Option(None, "--departamento", help="Template name."),
+    tipo: str | None = typer.Option(None, "--tipo", help="Document type (contrato, boleto)."),
+    de: str | None = typer.Option(None, "--de", help="Period start (AAAA-MM-DD)."),
+    ate: str | None = typer.Option(None, "--ate", help="Period end (AAAA-MM-DD)."),
+    max_hits: int = typer.Option(5, "--max", min=1, max=50, help="Hits to show."),
+) -> None:
+    """Search the index (full text in Portuguese plus filters); no model, no file is read.
+
+    Exit 0 with hits, 2 with none (or an owner/department the registry does not know).
+    """
+    from osa.db.session import DatabaseNotConfigured
+    from osa.domain.errors import DomainError
+    from osa.llm.envelopes import QueryEnvelope
+    from osa.search.service import SearchLimits, filters_for, run_search
+
+    settings = _settings()
+    words = [word for word in texto.split() if word]
+    if len(words) > 10:
+        _fail("no máximo 10 palavras-chave")
+    try:
+        envelope = QueryEnvelope(
+            dono=dono,
+            departamento=departamento,
+            tipo_documental=tipo,
+            periodo_inicio=_parse_date(de, "--de"),
+            periodo_fim=_parse_date(ate, "--ate"),
+            palavras_chave=words,
+        )
+    except ValidationError as error:
+        _fail("; ".join(item["msg"] for item in error.errors(include_url=False)))
+    limits = SearchLimits(
+        max_hits=max_hits, sensitive_extensions=tuple(settings.sensitive_extensions)
+    )
+    try:
+        with _session_factory()() as session:
+            filters = filters_for(session, envelope)
+            if filters.owner_unresolved is not None:
+                typer.echo(f"dono não encontrado no cadastro: {filters.owner_unresolved}")
+                raise typer.Exit(2)
+            if filters.department_unresolved is not None:
+                typer.echo(
+                    f"departamento não encontrado no template: {filters.department_unresolved}"
+                )
+                raise typer.Exit(2)
+            hits = run_search(session, filters, limits)
+    except (DatabaseNotConfigured, DomainError, ValueError) as error:
+        _fail(str(error))
+    except OperationalError:
+        _fail("banco de dados inacessível: confira OSA_DATABASE_URL e se o PostgreSQL está de pé")
+    except SQLAlchemyError:
+        _fail("erro de banco de dados ou esquema não migrado: rode `alembic upgrade head`")
+    if not hits:
+        typer.echo("nenhum documento encontrado")
+        raise typer.Exit(2)
+    for hit in hits:
+        flags = " [sensível]" if hit.sensivel else ""
+        tipo_text = hit.tipo_documental or "tipo desconhecido"
+        ano_text = f" {hit.ano}" if hit.ano is not None else ""
+        typer.echo(f"{hit.document_id} [{hit.estado}] {hit.caminho}{flags}")
+        typer.echo(f"    {tipo_text}{ano_text}: {(hit.resumo or '').strip()[:120]}")
 
 
 @app.command("bot")

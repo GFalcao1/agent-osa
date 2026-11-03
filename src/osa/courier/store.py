@@ -8,6 +8,7 @@ store, not the caller, owns the commit. Audit details never carry document text.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any, Protocol
 
 from sqlalchemy import func, select
@@ -27,6 +28,7 @@ from osa.db.models import (
 )
 from osa.domain.document import ReviewState
 from osa.domain.errors import NotFound
+from osa.fs.names import QUARANTINE_DIR
 
 
 class Store(Protocol):
@@ -69,6 +71,18 @@ class Store(Protocol):
     def active_owners(self) -> Sequence[Owner]: ...
 
     def documents_by_state(self) -> dict[str, int]: ...
+
+    def document_at(self, root_id: int, caminho: str) -> Document | None:
+        """The document the index knows at this root-relative path (exact spelling)."""
+        ...
+
+    def unseen_documents(self, root_id: int, since: datetime) -> Sequence[Document]:
+        """Documents of the root with a path in the tree that no scan saw since ``since``.
+
+        The quarantine is not scanned, so its documents are never "unseen"; a document
+        already marked absent is not listed again.
+        """
+        ...
 
     def audit(
         self,
@@ -205,6 +219,26 @@ class SqlStore:
             select(Document.estado, func.count()).group_by(Document.estado)
         )
         return {str(estado): int(count) for estado, count in rows}
+
+    def document_at(self, root_id: int, caminho: str) -> Document | None:
+        return self._session.scalar(
+            select(Document).where(Document.root_id == root_id, Document.caminho == caminho)
+        )
+
+    def unseen_documents(self, root_id: int, since: datetime) -> Sequence[Document]:
+        return list(
+            self._session.scalars(
+                select(Document)
+                .where(
+                    Document.root_id == root_id,
+                    Document.caminho.is_not(None),
+                    Document.caminho.not_like(f"{QUARANTINE_DIR}/%"),
+                    Document.ausente_em.is_(None),
+                    (Document.visto_em.is_(None)) | (Document.visto_em < since),
+                )
+                .order_by(Document.id)
+            )
+        )
 
     def audit(
         self,
