@@ -247,6 +247,7 @@ class StatusInfo:
     digest: str | None
     efeitos: bool
     raizes: tuple[RootSpace, ...]
+    versao: str = ""  # the running osa version (TASK-112)
 
 
 class CourierPort(Protocol):

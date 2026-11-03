@@ -255,16 +255,20 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 def dispatch_callback(ctx: BotContext, event: Callback) -> None:
     """Route a button press by its prefix (shared with the tests)."""
+    known = (upload.PREFIX, owners.PREFIX, review.PREFIX, query.PREFIX)
+    if not event.data.startswith(known):
+        # Not one of ours (a modified client): an unknown id is audited and gets nothing.
+        if auth.identify(ctx, event.from_id, event.chat_id, kind="callback") is not None:
+            ctx.bot.answer(event.callback_id)
+        return
     if event.data.startswith(upload.PREFIX):
         upload.handle_upload_callback(ctx, event)
     elif event.data.startswith(owners.PREFIX):
         owners.handle_owner_callback(ctx, event)
     elif event.data.startswith(review.PREFIX):
         review.handle_review_callback(ctx, event)
-    elif event.data.startswith(query.PREFIX):
-        query.handle_query_callback(ctx, event)
     else:
-        ctx.bot.answer(event.callback_id)
+        query.handle_query_callback(ctx, event)
 
 
 def run(settings: Settings) -> None:
@@ -279,8 +283,8 @@ def run(settings: Settings) -> None:
 
 def main() -> None:
     """Entrypoint ``osa-bot``."""
-    configure_logging()
     settings = Settings()
+    configure_logging(service="bot", log_file=str(settings.log_file) if settings.log_file else None)
     if settings.telegram_bot_token is None:
         raise SystemExit("erro: OSA_TELEGRAM_BOT_TOKEN não configurado")
     run(settings)

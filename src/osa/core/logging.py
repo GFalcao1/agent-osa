@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import sys
 from collections.abc import Iterator, Mapping, MutableMapping, Sequence
@@ -105,11 +106,92 @@ class _CurrentStderr:
         sys.stderr.flush()
 
 
-def configure_logging(level: int | str = "INFO", stream: Any = None) -> None:
-    """Configure structlog to emit one JSON object per line (default: the current stderr)."""
+def _service_fields(service: str | None) -> Any:
+    """Every line says which process wrote it and which version (TASK-112)."""
+    from osa.core.version import full_version
+
+    version = full_version()
+
+    def add(_logger: Any, _method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+        if service is not None:
+            event_dict.setdefault("servico", service)
+        event_dict.setdefault("versao", version)
+        return event_dict
+
+    return add
+
+
+class ReopeningFile:
+    """A log file that follows its path: rotated away (renamed), it is reopened on next write.
+
+    ``newsyslog`` renames ``bot.log`` and nobody signals the process; each write checks that the
+    path still names the open file and reopens it otherwise (mode 0600, append). Cheap: one
+    ``stat`` per line, and the logs are a few lines a minute.
+    """
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        self._handle: TextIO | None = None
+        self._identity: tuple[int, int] | None = None
+
+    def _open(self) -> TextIO:
+        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        handle = os.fdopen(fd, "a", encoding="utf-8", buffering=1)
+        info = os.fstat(fd)
+        self._handle, self._identity = handle, (info.st_dev, info.st_ino)
+        return handle
+
+    def _current(self) -> TextIO:
+        try:
+            info = os.stat(self.path)
+            same = self._identity == (info.st_dev, info.st_ino)
+        except FileNotFoundError:
+            same = False
+        if self._handle is not None and same:
+            return self._handle
+        if self._handle is not None:
+            self._handle.close()
+        return self._open()
+
+    def write(self, text: str) -> int:
+        return self._current().write(text)
+
+    def flush(self) -> None:
+        if self._handle is not None:
+            self._handle.flush()
+
+
+class _ToStructlog(logging.Handler):
+    """Library logs (the Telegram client, httpx) through the same JSON line and redaction."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            logger = structlog.get_logger(record.name)
+            method = getattr(logger, record.levelname.lower(), logger.warning)
+            method(record.getMessage(), biblioteca=record.name)
+        except Exception:  # a log line must never break the process
+            self.handleError(record)
+
+
+def configure_logging(
+    level: int | str = "INFO",
+    stream: Any = None,
+    *,
+    service: str | None = None,
+    log_file: str | None = None,
+) -> None:
+    """Configure structlog to emit one JSON object per line.
+
+    The destination is ``stream``, else ``log_file`` (``OSA_LOG_FILE``: reopened when rotated),
+    else the current stderr. Each line carries ``servico`` (``bot``, ``worker``...) when given,
+    ``versao`` (package and commit), and the ``request_id``/``document_id`` of the context. The
+    standard ``logging`` of the libraries goes through the same line at WARNING and above.
+    """
+    destination = stream or (ReopeningFile(log_file) if log_file else None)
     structlog.configure(
         processors=[
             merge_contextvars,
+            _service_fields(service),
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.format_exc_info,
@@ -120,9 +202,17 @@ def configure_logging(level: int | str = "INFO", stream: Any = None) -> None:
         wrapper_class=structlog.make_filtering_bound_logger(
             logging.getLevelNamesMapping()[level.upper()] if isinstance(level, str) else level
         ),
-        logger_factory=structlog.PrintLoggerFactory(file=stream or cast(TextIO, _CurrentStderr())),
+        logger_factory=structlog.PrintLoggerFactory(
+            file=cast(TextIO, destination or _CurrentStderr())
+        ),
         cache_logger_on_first_use=False,
     )
+    root = logging.getLogger()
+    for handler in [h for h in root.handlers if isinstance(h, _ToStructlog)]:
+        root.removeHandler(handler)
+    root.addHandler(_ToStructlog(level=logging.WARNING))
+    if root.level == logging.NOTSET or root.level > logging.WARNING:
+        root.setLevel(logging.WARNING)
 
 
 def get_logger(name: str | None = None) -> FilteringBoundLogger:

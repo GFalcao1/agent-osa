@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Backup noturno do banco (TASK-112, SPEC §11): scripts/backup.sh às 2h30. O script lê
+  /opt/osa/.env pelo Python da instalação, como o app lê (nunca por "source" no shell), e
+  recusa a pasta se o share não estiver montado ou se ela estiver no disco desta máquina ou
+  dentro de uma raiz. As ferramentas do PostgreSQL 17 vêm do Homebrew. Roda e sai.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.osa.backup</string>
+  <key>UserName</key>
+  <string>osa</string>
+  <key>WorkingDirectory</key>
+  <string>/opt/osa</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/osa/scripts/backup.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/opt/postgresql@17/bin:/usr/bin:/bin</string>
+    <key>OSA_PYTHON</key>
+    <string>/opt/osa/.venv/bin/python</string>
+    <key>OSA_ENV_FILE</key>
+    <string>/opt/osa/.env</string>
+  </dict>
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/usr/local/var/log/osa/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/osa/backup.log</string>
+</dict>
+</plist>

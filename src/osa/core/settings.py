@@ -180,6 +180,8 @@ class Settings(BaseSettings):
         ".crt",
     )
     quarantine_dir: Path | None = None
+    # Where bot and worker write their JSON log lines (reopened after rotation); unset: stderr.
+    log_file: Path | None = None
     # The Bot API refuses uploads above 50 MB: a larger setting would only make sends fail.
     telegram_send_limit_mb: int = Field(default=50, ge=1, le=50)
 
