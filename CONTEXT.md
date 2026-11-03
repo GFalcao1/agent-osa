@@ -162,14 +162,26 @@ _Evitar_: certificado (ambíguo com certidão em PDF)
 Formato sem extração implementada; fica na origem e gera aviso.
 
 **Índice**:
-Registro em banco de cada documento conhecido: hash, caminho, dono, departamento, metadados do envelope, texto extraído e estado.
+Registro em banco de cada documento conhecido: hash, caminho, dono, departamento, metadados do envelope, texto extraído (com `texto_tsv` gerado pelo banco para a busca) e estado; mais `visto_em` e `ausente_em`, o que o scan sabe do arquivo no disco.
 _Evitar_: banco de hashes, catálogo
+
+**Busca**:
+Consulta ao índice (`osa.search.service.search`): FTS em português sobre nome, tipo, resumo e texto, mais filtros de dono, departamento, tipo e período resolvidos no cadastro. Dono ou departamento que o cadastro não conhece é resposta vazia com o filtro não entendido. Devolve até 5 `Hit` (id, caminho, nome, dono, departamento, ano, tipo, resumo, estado, se é sensível), nunca o texto, nunca ausente nem sem caminho.
+_Evitar_: pesquisa semântica (V2), consulta (é o pedido do operador)
 
 **Duplicata**:
 Arquivo cujo sha256 já consta no índice como arquivado ou em revisão; é informado, não arquivado de novo. Um documento que falhou, ficou na origem ou não foi suportado é reprocessado na mesma entrada.
 
 **Scan**:
-Leitura das raízes para alimentar o índice com o que já está na árvore, sem mover nada.
+Leitura das raízes para alimentar o índice com o que já está na árvore, sem mover nada (`osa scan`, `osa.worker.scan`). Dono e departamento vêm do caminho; o modelo só gera metadados. No padrão fica `ARQUIVADO`; fora dele, `NA_ORIGEM` com dono nulo. Retomável por raiz (`scan_cursor`, `scan_iniciado_em`, `ultimo_scan` em `roots`); o que começa com ponto fica de fora.
+_Evitar_: indexação (é o resultado), varredura automática (é a TASK-111)
+
+**Movido manualmente**:
+Arquivo cujo hash o índice já conhece em outro caminho que não existe mais (caminhos comparados como o share: sem caixa nem forma Unicode): o scan atualiza caminho, dono e departamento na mesma entrada e audita `document.move` com `movido_manualmente`; só um estado que o caminho decidiu (`ARQUIVADO`, `NA_ORIGEM` fora do padrão) é recalculado. Se o caminho antigo ainda existe, a cópia nova é duplicata. Um documento que o scan deixou `NA_ORIGEM`, `NAO_SUPORTADO` ou `FALHOU` e depois subiu pelo Telegram é reaproveitado pelo correio na mesma entrada (o caminho passa à quarentena e ao destino); o arquivo original na árvore vira duplicata a cada scan.
+
+**Ausente**:
+Documento que um scan completo da sua raiz não encontrou no caminho registrado: `ausente_em` marcado, entrada mantida, fora da busca; o arquivo que volta limpa a marca. Um scan com `--desde`, retomado de outro com `--desde` diferente (ele recomeça), ou que encontrou pasta ou arquivo ilegível nunca marca ausente.
+_Evitar_: apagado, removido
 
 **Estado**:
 Posição do documento no índice: `DETECTADO`, `ESTAVEL`, `EXTRAIDO`, `CLASSIFICADO`, `ARQUIVADO`, `EM_REVISAO`, `NA_ORIGEM`, `NAO_SUPORTADO`, `FALHOU`. As transições são regra do correio, não do banco.
@@ -178,7 +190,7 @@ Posição do documento no índice: `DETECTADO`, `ESTAVEL`, `EXTRAIDO`, `CLASSIFI
 Como o documento entrou no índice: `telegram`, `watched` (pasta monitorada) ou `scan`.
 
 **Auditoria**:
-Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. A chamada ao provedor externo grava `tentativa` antes da rede (guardada como `failed` com `fase = tentativa`, porque a tabela não tem "pendente") e `ok` ou `failed` só depois dela. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`, `cli:process`, `cli:undo`); do bot: `telegram:<id do Telegram>`, inclusive para um id fora da allowlist (`telegram.unknown`, `denied`) e para o upload recusado antes do download (`telegram.upload`, `denied`). A decisão de revisão grava `review.decide` (ok, denied pelo share ou failed) ou `review.origin`, com `decidido_por`. O correio grava um evento por etapa do documento (`document.detect`, `document.extract`, `document.classify`, `document.evidence` quando o texto contradiz ou confunde o dono, `archive.intent`, `document.archive`, `document.review`, `document.fail`, `document.unsupported`, `document.duplicate`, `archive.undo`) e pelo pedido de dono (`owner.request.confirm`, `owner.request.refuse`, `owner.tree`), sempre com o sha256 e nunca com texto: um motivo de revisão escrito pelo modelo entra como `motivo_livre`; a recusa de classe sensível (`document.intake`, `denied`) não tem documento nem hash. Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
+Registro append-only de eventos (ator, ação, alvo, hash, resultado); o banco rejeita UPDATE, DELETE e TRUNCATE. Nunca recebe texto de documento nem segredo. A chamada ao provedor externo grava `tentativa` antes da rede (guardada como `failed` com `fase = tentativa`, porque a tabela não tem "pendente") e `ok` ou `failed` só depois dela. Atores do cadastro: `panel:local` (painel) e `cli:<comando>` (`cli:bootstrap`, `cli:import`, `cli:process`, `cli:undo`, `cli:scan`); do bot: `telegram:<id do Telegram>`, inclusive para um id fora da allowlist (`telegram.unknown`, `denied`) e para o upload recusado antes do download (`telegram.upload`, `denied`). A decisão de revisão grava `review.decide` (ok, denied pelo share ou failed) ou `review.origin`, com `decidido_por`. O correio grava um evento por etapa do documento (`document.detect`, `document.extract`, `document.classify`, `document.evidence` quando o texto contradiz ou confunde o dono, `archive.intent`, `document.archive`, `document.review`, `document.fail`, `document.unsupported`, `document.duplicate`, `archive.undo`) e pelo pedido de dono (`owner.request.confirm`, `owner.request.refuse`, `owner.tree`); o scan grava na raiz `scan.start`, `scan.skip` (pasta ilegível), `scan.stop` e `scan.finish` (contagens) e no documento os mesmos eventos de etapa mais `document.index` (estado final, colocação e o departamento que o modelo disse), `document.sensitive` (classe sensível indexada só com hash e caminho), `document.move` e `document.absent`, sempre com o sha256 e nunca com texto: um motivo de revisão escrito pelo modelo entra como `motivo_livre`; a recusa de classe sensível (`document.intake`, `denied`) não tem documento nem hash. Recusas de bootstrap e de raiz (`resultado = denied`) e a sonda de escrita (`root.probe`) são gravadas numa transação própria e por isso sobrevivem ao rollback da operação recusada (inclusive de um import revertido); não é vazamento da transação.
 
 ## Tabelas
 
