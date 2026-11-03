@@ -164,6 +164,11 @@ class Settings(BaseSettings):
     poll_interval_seconds: int = Field(default=45, ge=30, le=60)
     stable_cycles: int = Field(default=2, ge=1)
     min_file_age_seconds: int = Field(default=60, ge=0)
+    # The worker's periodic rescan of every active root (TASK-111), in parts of this many
+    # documents sent to the model per cycle, so watching never waits for a whole archive.
+    rescan_interval_hours: int = Field(default=24, ge=1)
+    scan_documents_per_cycle: int = Field(default=20, ge=1)
+    scan_files_per_cycle: int = Field(default=500, ge=1)
     max_text_chars: int = Field(default=12000, ge=1)
     max_image_pages: int = Field(default=5, ge=1)
     sensitive_extensions: Annotated[tuple[str, ...], NoDecode, Field(min_length=1)] = (

@@ -240,8 +240,13 @@ def archive(
     *,
     effects_enabled: bool = False,
     max_name_units: int = MAX_NAME_UNITS,
+    expected_sha256: str | None = None,
 ) -> ArchiveResult:
     """Arquiva ``src`` em ``dest_dir`` por rename exclusivo, na mesma raiz e no mesmo volume.
+
+    Com ``expected_sha256``, a origem aberta é conferida contra o hash do registro antes do
+    rename (``IdentityChanged``, nada movido): um arquivo trocado depois de lido nunca vai ao
+    destino decidido para o conteúdo anterior.
 
     O correio passa ``src`` e ``dest_dir`` **relativos à raiz** (é a forma do registro);
     absolutos só são aceitos se estiverem lexicalmente dentro de ``root`` (senão
@@ -270,7 +275,7 @@ def archive(
         name if name is not None else src_parts[-1],
         effects_enabled=effects_enabled,
         max_name_units=max_name_units,
-        expected_sha256=None,
+        expected_sha256=expected_sha256,
     )
 
 

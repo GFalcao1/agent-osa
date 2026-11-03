@@ -140,6 +140,7 @@ class MemoryStore:
         self.root_row = _Row(
             id=1, caminho=str(root_path), ativo=True,
             scan_iniciado_em=None, scan_desde=None, scan_cursor=None, ultimo_scan=None,
+            scan_pulou=False,
         )  # fmt: skip
         self.owners = [_Row(id=10, pasta=ALFA.pasta, ativo=True)]
         self.departments = [
@@ -178,6 +179,14 @@ class MemoryStore:
 
     def audit(self, **event: Any) -> None:
         self.events.append(event)
+
+    def watched_folders(self, root_id: int | None = None, *, active_only: bool = True) -> list[Any]:
+        return []
+
+    def scan_lock(self, root_id: int) -> Any:
+        from contextlib import nullcontext
+
+        return nullcontext(True)
 
     def save(self) -> None:
         pass

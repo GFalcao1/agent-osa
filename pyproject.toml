@@ -38,6 +38,7 @@ dependencies = [
 [project.scripts]
 osa = "osa.cli:main"
 osa-bot = "osa.telegram.app:main"
+osa-worker = "osa.worker.app:main"
 
 [dependency-groups]
 dev = [

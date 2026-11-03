@@ -9,7 +9,6 @@ back on the loop. Nothing here decides anything: see the handlers and the courie
 from __future__ import annotations
 
 import asyncio
-import datetime
 import uuid
 from collections.abc import Coroutine, Sequence
 from typing import Any
@@ -27,7 +26,7 @@ from telegram.ext import (
 
 from osa.core.logging import configure_logging, get_logger, log_context
 from osa.core.settings import Settings
-from osa.telegram import auth, jobs
+from osa.telegram import auth
 from osa.telegram.handlers import admin, owners, query, review, upload
 from osa.telegram.ports import (
     BotContext,
@@ -43,8 +42,6 @@ from osa.telegram.ports import (
 
 log = get_logger("osa.telegram")
 
-# 9h in this machine's time zone (the job queue would otherwise read a naive time as UTC).
-REMINDER_TIME = datetime.time(hour=9, minute=0, tzinfo=datetime.datetime.now().astimezone().tzinfo)
 COMMANDS = ("start", "ajuda", "status", "desfazer", "pendentes")
 CALL_TIMEOUT = 120.0
 UPLOAD_BASE_S = 30.0
@@ -65,7 +62,7 @@ class PtbBot:
     def send(self, chat_id: int, text: str, buttons: Keyboard = ()) -> int:
         message = self._run(
             self._application.bot.send_message(
-                chat_id=chat_id, text=text, reply_markup=_markup(buttons)
+                chat_id=chat_id, text=text, reply_markup=keyboard_markup(buttons)
             )
         )
         return int(message.message_id)
@@ -74,7 +71,10 @@ class PtbBot:
         try:
             self._run(
                 self._application.bot.edit_message_text(
-                    chat_id=chat_id, message_id=message_id, text=text, reply_markup=_markup(buttons)
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=keyboard_markup(buttons),
                 )
             )
         except BadRequest as error:  # the same text and buttons again: not an error
@@ -116,7 +116,7 @@ class PtbBot:
         return int(message.message_id)
 
 
-def _markup(buttons: Keyboard) -> InlineKeyboardMarkup | None:
+def keyboard_markup(buttons: Keyboard) -> InlineKeyboardMarkup | None:
     if not buttons:
         return None
     return InlineKeyboardMarkup(
@@ -142,8 +142,6 @@ def build_application(
             effects_enabled=settings.enable_file_effects,
             sensitive_extensions=tuple(settings.sensitive_extensions),
         )
-        if application.job_queue is not None:
-            application.job_queue.run_daily(_reminder, time=REMINDER_TIME, name="lembrete")
         log.info("telegram.ready", effects=settings.enable_file_effects)
 
     application = (
@@ -267,10 +265,6 @@ def dispatch_callback(ctx: BotContext, event: Callback) -> None:
         query.handle_query_callback(ctx, event)
     else:
         ctx.bot.answer(event.callback_id)
-
-
-async def _reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _in_thread(jobs.daily_reminder, _ctx(context))
 
 
 def run(settings: Settings) -> None:

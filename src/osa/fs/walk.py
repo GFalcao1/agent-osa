@@ -17,11 +17,12 @@ from __future__ import annotations
 import errno
 import os
 import stat
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from osa.fs.roots import open_root
+from osa.fs.names import component_key
+from osa.fs.roots import open_beneath, open_root
 
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
@@ -33,6 +34,7 @@ class FileEntry:
     parts: tuple[str, ...]
     size: int
     mtime: float
+    mtime_ns: int = 0  # the exact mtime, for the stability check of a watched folder
 
     @property
     def relative(self) -> str:
@@ -79,7 +81,20 @@ def _skip_dir(parts: tuple[str, ...], cursor: tuple[str, ...]) -> bool:
     return cursor[:depth] != parts and parts < cursor[:depth]
 
 
-def _visit(dir_fd: int, parts: tuple[str, ...], cursor: tuple[str, ...]) -> Iterator[Visit]:
+PruneKey = tuple[str, ...]
+
+
+def prune_key(relative: str) -> PruneKey:
+    """A folder to leave out, compared as the share compares names (case, Unicode form)."""
+    return tuple(component_key(part) for part in relative.split("/") if part)
+
+
+def _visit(
+    dir_fd: int,
+    parts: tuple[str, ...],
+    cursor: tuple[str, ...],
+    prune: frozenset[PruneKey] = frozenset(),
+) -> Iterator[Visit]:
     try:
         names = sorted(os.listdir(dir_fd))
     except OSError as error:
@@ -96,6 +111,8 @@ def _visit(dir_fd: int, parts: tuple[str, ...], cursor: tuple[str, ...]) -> Iter
         if stat.S_ISDIR(info.st_mode):
             if _skip_dir(child, cursor):
                 continue
+            if prune and tuple(component_key(p) for p in child) in prune:
+                continue  # a watched folder: the worker reads it, the scan never does
             try:
                 fd = os.open(name, _DIR_FLAGS, dir_fd=dir_fd)
             except OSError as error:
@@ -104,22 +121,74 @@ def _visit(dir_fd: int, parts: tuple[str, ...], cursor: tuple[str, ...]) -> Iter
                 yield SkippedDir(child, f"pasta ilegível ({_code(error)})")
                 continue
             try:
-                yield from _visit(fd, child, cursor)
+                yield from _visit(fd, child, cursor, prune)
             finally:
                 os.close(fd)
         elif stat.S_ISREG(info.st_mode):
             if cursor and not comes_after(child, cursor):
                 continue
-            yield FileEntry(child, info.st_size, info.st_mtime)
+            yield FileEntry(child, info.st_size, info.st_mtime, info.st_mtime_ns)
         # links, sockets, dispositivos: ignorados
 
 
-def iter_files(root: Path | str, *, after: str | None = None) -> Iterator[Visit]:
+def iter_files(
+    root: Path | str, *, after: str | None = None, skip: Iterable[str] = ()
+) -> Iterator[Visit]:
     """Arquivos comuns da raiz em ordem determinística, a partir do caminho ``after``.
 
     A raiz é aberta uma vez com ``open_root`` (recusa link em qualquer componente); cada pasta
-    é aberta pelo descritor da anterior sem seguir link. Nada é criado, movido ou apagado.
+    é aberta pelo descritor da anterior sem seguir link. ``skip`` são pastas relativas à raiz
+    que ficam inteiras de fora (as pastas monitoradas). Nada é criado, movido ou apagado.
     """
     cursor = split_cursor(after)
+    prune = frozenset(prune_key(folder) for folder in skip)
     with open_root(root) as root_fd:
-        yield from _visit(root_fd, (), cursor)
+        yield from _visit(root_fd, (), cursor, prune)
+
+
+#: Nomes de cópia em andamento ou de lixo de sistema que a pasta monitorada nunca processa.
+_TEMPORARY_PREFIXES = ("~$",)
+_TEMPORARY_SUFFIXES = (".part", ".partial", ".crdownload", ".download", ".tmp", ".temp")
+_SYSTEM_NAMES = frozenset({"thumbs.db", "desktop.ini"})
+
+
+def is_temporary_name(name: str) -> bool:
+    """Arquivo que um programa ainda escreve (download, cópia, dono do Office) ou do sistema."""
+    folded = name.casefold()
+    return (
+        name.startswith(".")
+        or folded.startswith(_TEMPORARY_PREFIXES)
+        or folded.endswith(_TEMPORARY_SUFFIXES)
+        or folded in _SYSTEM_NAMES
+    )
+
+
+def list_folder(
+    root: Path | str, relative: str, *, unreadable: list[str] | None = None
+) -> list[FileEntry]:
+    """Os arquivos comuns de uma pasta da raiz (sem descer em subpastas), em ordem de nome.
+
+    Para a pasta monitorada: só ``stat`` sem seguir link, nunca o conteúdo; nomes com ponto e
+    de arquivo temporário ficam de fora (``is_temporary_name``). Um nome cujo ``stat`` falhou
+    vai para ``unreadable`` (o chamador não o toma por sumido). Pasta que não existe é
+    ``NotFound``; link no caminho é ``UnsafePath``.
+    """
+    parts = tuple(part for part in relative.split("/") if part)
+    entries: list[FileEntry] = []
+    with open_root(root) as root_fd, open_beneath(root_fd, parts) as folder:
+        for name in sorted(os.listdir(folder.fd)):
+            if is_temporary_name(name):
+                continue
+            try:
+                info = os.stat(name, dir_fd=folder.fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue  # sumiu entre a listagem e o stat
+            except OSError:
+                if unreadable is not None:
+                    unreadable.append("/".join((*folder.parts, name)))
+                continue
+            if stat.S_ISREG(info.st_mode):
+                entries.append(
+                    FileEntry((*folder.parts, name), info.st_size, info.st_mtime, info.st_mtime_ns)
+                )
+    return entries

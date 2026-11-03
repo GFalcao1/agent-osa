@@ -7,17 +7,19 @@ store, not the caller, owns the commit. Audit details never carry document text.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
-from sqlalchemy import func, select
+from sqlalchemy import Connection, Engine, func, select
 from sqlalchemy.orm import Session
 
 from osa.courier.evidence import OwnerCandidate
 from osa.db.audit import record_event
 from osa.db.models import (
     ArchiveOperation,
+    AuditEvent,
     Department,
     Document,
     Owner,
@@ -25,10 +27,33 @@ from osa.db.models import (
     ReviewCase,
     Root,
     User,
+    WatchedFolder,
+    WatchEntry,
 )
 from osa.domain.document import ReviewState
 from osa.domain.errors import NotFound
 from osa.fs.names import QUARANTINE_DIR
+
+#: Advisory lock namespaces (two-key form): one scan per root, one worker per installation.
+LOCK_SCAN: Final = 0x05CA
+LOCK_WORKER: Final = 0x0A5C
+
+
+@contextmanager
+def try_advisory_lock(engine: Engine, namespace: int, key: int) -> Iterator[bool]:
+    """A session-level PostgreSQL advisory lock on a connection of its own, held for the block.
+
+    The courier commits as it goes (the session's connection changes), so the lock lives on a
+    dedicated connection, released at the end of the block (or when the process dies).
+    """
+    with engine.connect() as connection:
+        got = bool(connection.execute(select(func.pg_try_advisory_lock(namespace, key))).scalar())
+        try:
+            yield got
+        finally:
+            if got:
+                connection.execute(select(func.pg_advisory_unlock(namespace, key)))
+            connection.commit()
 
 
 class Store(Protocol):
@@ -74,6 +99,47 @@ class Store(Protocol):
 
     def document_at(self, root_id: int, caminho: str) -> Document | None:
         """The document the index knows at this root-relative path (exact spelling)."""
+        ...
+
+    def watched_folders(
+        self, root_id: int | None = None, *, active_only: bool = True
+    ) -> Sequence[WatchedFolder]:
+        """Watched folders of one root (or of every active root); active ones by default."""
+        ...
+
+    def watched_folder(self, folder_id: int) -> WatchedFolder: ...
+
+    def watch_entries(self, folder_id: int) -> Sequence[WatchEntry]: ...
+
+    def add_watch_entry(self, entry: WatchEntry) -> WatchEntry: ...
+
+    def drop_watch_entry(self, entry: WatchEntry) -> None:
+        """A file left the folder: its observation goes (a work row, never the index)."""
+        ...
+
+    def pending_watch_notices(self) -> Sequence[WatchEntry]:
+        """Rows with a notice not delivered yet (the outbox), oldest first."""
+        ...
+
+    def mark_watch_notice_sent(self, entry_id: int, when: datetime) -> None: ...
+
+    def scan_lock(self, root_id: int) -> AbstractContextManager[bool]:
+        """Hold the scan of one root (True) or learn another process holds it (False)."""
+        ...
+
+    def worker_lock(self) -> AbstractContextManager[bool]:
+        """Hold the worker of this installation (True) or learn another one runs (False)."""
+        ...
+
+    def count_events(
+        self,
+        *,
+        acao: str,
+        alvo_tipo: str | None = None,
+        alvo_id: int | None = None,
+        since: datetime | None = None,
+    ) -> int:
+        """How many audit events match (the trail is read, never changed)."""
         ...
 
     def unseen_documents(self, root_id: int, since: datetime) -> Sequence[Document]:
@@ -224,6 +290,83 @@ class SqlStore:
         return self._session.scalar(
             select(Document).where(Document.root_id == root_id, Document.caminho == caminho)
         )
+
+    def watched_folders(
+        self, root_id: int | None = None, *, active_only: bool = True
+    ) -> Sequence[WatchedFolder]:
+        query = (
+            select(WatchedFolder)
+            .join(Root, Root.id == WatchedFolder.root_id)
+            .order_by(WatchedFolder.id)
+        )
+        if active_only:
+            query = query.where(WatchedFolder.ativo.is_(True), Root.ativo.is_(True))
+        if root_id is not None:
+            query = query.where(WatchedFolder.root_id == root_id)
+        return list(self._session.scalars(query))
+
+    def watched_folder(self, folder_id: int) -> WatchedFolder:
+        return self._get(WatchedFolder, folder_id, "pasta monitorada")
+
+    def watch_entries(self, folder_id: int) -> Sequence[WatchEntry]:
+        return list(
+            self._session.scalars(
+                select(WatchEntry)
+                .where(WatchEntry.watched_folder_id == folder_id)
+                .order_by(WatchEntry.id)
+            )
+        )
+
+    def add_watch_entry(self, entry: WatchEntry) -> WatchEntry:
+        self._session.add(entry)
+        self._session.flush()
+        return entry
+
+    def drop_watch_entry(self, entry: WatchEntry) -> None:
+        self._session.delete(entry)
+        self._session.flush()
+
+    def pending_watch_notices(self) -> Sequence[WatchEntry]:
+        return list(
+            self._session.scalars(
+                select(WatchEntry)
+                .where(WatchEntry.aviso.is_not(None), WatchEntry.aviso_enviado_em.is_(None))
+                .order_by(WatchEntry.id)
+            )
+        )
+
+    def mark_watch_notice_sent(self, entry_id: int, when: datetime) -> None:
+        entry = self._session.get(WatchEntry, entry_id)
+        if entry is not None:
+            entry.aviso_enviado_em = when
+            self._session.flush()
+
+    def scan_lock(self, root_id: int) -> AbstractContextManager[bool]:
+        return try_advisory_lock(self._engine(), LOCK_SCAN, root_id)
+
+    def worker_lock(self) -> AbstractContextManager[bool]:
+        return try_advisory_lock(self._engine(), LOCK_WORKER, 0)
+
+    def _engine(self) -> Engine:
+        bind = self._session.get_bind()
+        return bind.engine if isinstance(bind, Connection) else bind
+
+    def count_events(
+        self,
+        *,
+        acao: str,
+        alvo_tipo: str | None = None,
+        alvo_id: int | None = None,
+        since: datetime | None = None,
+    ) -> int:
+        query = select(func.count()).select_from(AuditEvent).where(AuditEvent.acao == acao)
+        if alvo_tipo is not None:
+            query = query.where(AuditEvent.alvo_tipo == alvo_tipo)
+        if alvo_id is not None:
+            query = query.where(AuditEvent.alvo_id == str(alvo_id))
+        if since is not None:
+            query = query.where(AuditEvent.timestamp >= since)
+        return int(self._session.scalar(query) or 0)
 
     def unseen_documents(self, root_id: int, since: datetime) -> Sequence[Document]:
         return list(

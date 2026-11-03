@@ -8,6 +8,7 @@ the courier must stay importable, and testable with fakes, without it). The mode
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import stat
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from osa.extract.model import ExtractedContent
     from osa.fs.archive import ArchiveResult
     from osa.fs.template import TreeResult
-    from osa.fs.walk import Visit
+    from osa.fs.walk import FileEntry, Visit
     from osa.llm.envelopes import ClassificationEnvelope, DepartmentInput
 
 _CHUNK = 1024 * 1024
@@ -62,8 +63,21 @@ class FsPort(Protocol):
 
     def has_folder(self, root: Path, relative: str) -> bool: ...
 
-    def walk(self, root: Path, *, after: str | None = None) -> Iterator[Visit]:
-        """Regular files of the root in a deterministic order, from ``after`` on (the scan)."""
+    def walk(
+        self, root: Path, *, after: str | None = None, skip: Sequence[str] = ()
+    ) -> Iterator[Visit]:
+        """Regular files of the root in a deterministic order, from ``after`` on (the scan);
+        ``skip`` are root-relative folders left out whole (the watched folders)."""
+        ...
+
+    def list_folder(
+        self, root: Path, relative: str, *, unreadable: list[str] | None = None
+    ) -> list[FileEntry]:
+        """Regular files directly in a folder of the root, by ``stat`` only (the worker)."""
+        ...
+
+    def fingerprint(self, root: Path, relative: str) -> tuple[int, int] | None:
+        """Size and mtime (ns) of ``relative`` right now, without following links; None if gone."""
         ...
 
     def ensure_owner_tree(
@@ -77,8 +91,17 @@ class FsPort(Protocol):
     ) -> TreeResult: ...
 
     def archive(
-        self, root: Path, src: str, dest_dir: str, name: str, *, effects_enabled: bool
-    ) -> ArchiveResult: ...
+        self,
+        root: Path,
+        src: str,
+        dest_dir: str,
+        name: str,
+        *,
+        effects_enabled: bool,
+        expected_sha256: str | None = None,
+    ) -> ArchiveResult:
+        """The rename; with ``expected_sha256`` the source is checked against the record."""
+        ...
 
     def undo(
         self,
@@ -202,10 +225,48 @@ class LocalFs:
         except NotFound:
             return False
 
-    def walk(self, root: Path, *, after: str | None = None) -> Iterator[Visit]:
+    def walk(
+        self, root: Path, *, after: str | None = None, skip: Sequence[str] = ()
+    ) -> Iterator[Visit]:
         from osa.fs.walk import iter_files
 
-        return iter_files(root, after=after)
+        return iter_files(root, after=after, skip=skip)
+
+    def list_folder(
+        self, root: Path, relative: str, *, unreadable: list[str] | None = None
+    ) -> list[FileEntry]:
+        from osa.fs.walk import list_folder
+
+        return list_folder(root, relative, unreadable=unreadable)
+
+    def fingerprint(self, root: Path, relative: str) -> tuple[int, int] | None:
+        """Size and mtime now; ``None`` when gone, or when another client is still writing.
+
+        On macOS a shared-lock open (``O_SHLOCK``, which smbfs turns into a deny-write share
+        mode) fails while a writer on another machine holds the file open for writing; that is
+        the copy still in progress even when its size and mtime look settled. Elsewhere only
+        size and mtime count.
+        """
+        from osa.domain.errors import NotFound
+        from osa.fs.roots import resolve_within
+
+        try:
+            path = resolve_within(root, relative)
+            info = os.stat(path, follow_symlinks=False)
+        except (NotFound, OSError):
+            return None
+        shared_lock = getattr(os, "O_SHLOCK", 0)
+        if shared_lock:
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | shared_lock)
+            except BlockingIOError:
+                return None  # someone holds it for writing: still copying
+            except OSError as error:
+                if error.errno in {errno.EBUSY, errno.EAGAIN, errno.EACCES}:
+                    return None
+                raise
+            os.close(fd)
+        return info.st_size, info.st_mtime_ns
 
     def ensure_owner_tree(
         self,
@@ -227,11 +288,21 @@ class LocalFs:
         )
 
     def archive(
-        self, root: Path, src: str, dest_dir: str, name: str, *, effects_enabled: bool
+        self,
+        root: Path,
+        src: str,
+        dest_dir: str,
+        name: str,
+        *,
+        effects_enabled: bool,
+        expected_sha256: str | None = None,
     ) -> ArchiveResult:
         from osa.fs.archive import archive
 
-        return archive(root, src, dest_dir, name, effects_enabled=effects_enabled)
+        return archive(
+            root, src, dest_dir, name, effects_enabled=effects_enabled,
+            expected_sha256=expected_sha256,
+        )  # fmt: skip
 
     def undo(
         self,

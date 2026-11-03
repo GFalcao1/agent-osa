@@ -762,7 +762,7 @@ def test_owner_and_review_modules_expose_their_prefixes() -> None:
 
 
 def test_the_reminder_time_carries_the_local_time_zone() -> None:
-    from osa.telegram.app import REMINDER_TIME
+    from osa.telegram.jobs import REMINDER_TIME
 
     assert (REMINDER_TIME.hour, REMINDER_TIME.minute) == (9, 0)
     assert REMINDER_TIME.tzinfo is not None

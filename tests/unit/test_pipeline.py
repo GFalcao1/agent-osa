@@ -257,9 +257,17 @@ class FakeFs:
         return candidate, n
 
     def archive(
-        self, root: Path, src: str, dest_dir: str, name: str, *, effects_enabled: bool
+        self,
+        root: Path,
+        src: str,
+        dest_dir: str,
+        name: str,
+        *,
+        effects_enabled: bool,
+        expected_sha256: str | None = None,
     ) -> Any:
         self.archive_calls.append((src, dest_dir, name, effects_enabled))
+        self.expected_sha256 = expected_sha256
         # The courier must have persisted the decision before asking for the effect.
         assert any(e["acao"] == "archive.intent" for e in self.store.committed), (
             "effect requested before the decision was committed"
