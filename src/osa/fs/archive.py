@@ -32,6 +32,7 @@ from osa.fs.errors import (
     IdentityChanged,
 )
 from osa.fs.names import (
+    MAX_NAME_BYTES,
     MAX_NAME_UNITS,
     QUARANTINE_DIR,
     component_key,
@@ -147,9 +148,10 @@ def _relocate(
     *,
     effects_enabled: bool,
     max_name_units: int,
+    max_name_bytes: int | None,
     expected_sha256: str | None,
 ) -> ArchiveResult:
-    final = validate_filename(name, max_units=max_name_units)
+    final = validate_filename(name, max_units=max_name_units, max_bytes=max_name_bytes)
     base = Path(root)
     with ExitStack() as stack:
         root_fd = stack.enter_context(open_root(base))
@@ -186,7 +188,7 @@ def _relocate(
         taken = {component_key(existing) for existing in list_dir(dest_dir.fd)}
 
         for n in range(1, names.MAX_SUFFIX + 1):
-            candidate = suffixed(final, n, max_units=max_name_units)
+            candidate = suffixed(final, n, max_units=max_name_units, max_bytes=max_name_bytes)
             key = component_key(candidate)
             if key in taken:
                 continue
@@ -241,6 +243,7 @@ def archive(
     *,
     effects_enabled: bool = False,
     max_name_units: int = MAX_NAME_UNITS,
+    max_name_bytes: int | None = MAX_NAME_BYTES,
     expected_sha256: str | None = None,
 ) -> ArchiveResult:
     """Arquiva ``src`` em ``dest_dir`` por rename exclusivo, na mesma raiz e no mesmo volume.
@@ -255,7 +258,8 @@ def archive(
     ``UnsafePath``. O destino é uma pasta existente do template (nunca é criada;
     ``DestinationMissing``) e nunca a quarentena (``CrossRoot``). O nome é ``name`` ou o da
     origem, em NFC; em colisão ganha `` (2)``, `` (3)``... antes da extensão (composta inclusive);
-    nome ou sufixo acima de ``max_name_units`` é ``NameTooLong``, sem truncar e sem efeito.
+    nome ou sufixo acima de ``max_name_units`` (ou de ``max_name_bytes``, onde o sistema conta
+    bytes) é ``NameTooLong``, sem truncar e sem efeito.
     Sem rename exclusivo comprovado, ``NoReplaceUnavailable``. Com efeitos desligados (padrão)
     só olha e devolve o previsto (``simulated=True``).
     """
@@ -276,6 +280,7 @@ def archive(
         name if name is not None else src_parts[-1],
         effects_enabled=effects_enabled,
         max_name_units=max_name_units,
+        max_name_bytes=max_name_bytes,
         expected_sha256=expected_sha256,
     )
 
@@ -285,6 +290,7 @@ def undo(
     *,
     effects_enabled: bool = False,
     max_name_units: int = MAX_NAME_UNITS,
+    max_name_bytes: int | None = MAX_NAME_BYTES,
 ) -> ArchiveResult:
     """Rename inverso de um arquivamento registrado, conferido pelo ``sha256`` do registro.
 
@@ -304,5 +310,6 @@ def undo(
         origem[-1],
         effects_enabled=effects_enabled,
         max_name_units=max_name_units,
+        max_name_bytes=max_name_bytes,
         expected_sha256=record.sha256,
     )

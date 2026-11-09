@@ -200,6 +200,12 @@ def test_nome_de_200_caracteres_acentuados(tree: Path, note: Note) -> None:
         assert (tree / QUARANTINE_DIR / "u").read_bytes() == b"conteudo"
         assert not any(p.name.startswith("á") for p in (tree / "Alfa" / "Fiscal").iterdir())
         note(f"nome de 200 caracteres ({names.name_bytes(name)} bytes) recusado pelo produto")
+        name = "á" * 125 + ".pdf"  # 254 bytes: o maior acentuado que o Linux grava
+        result = archive(tree, f"{QUARANTINE_DIR}/u", "Alfa/Fiscal", name, effects_enabled=True)
+        listed = [p.name for p in (tree / "Alfa" / "Fiscal").iterdir() if p.name.startswith("á")]
+        note(f"nome acentuado de {names.name_bytes(name)} bytes gravado e lido em NFC")
+        assert [unicodedata.normalize("NFC", n) for n in listed] == [name]
+        assert result.path.read_bytes() == b"conteudo"
         return
     result = archive(tree, f"{QUARANTINE_DIR}/u", "Alfa/Fiscal", name, effects_enabled=True)
     listed = [p.name for p in (tree / "Alfa" / "Fiscal").iterdir()]
@@ -257,7 +263,8 @@ def test_limite_de_nome_medido_no_share(work: Path, note: Note) -> None:
     assert not mismatches, (
         f"o limite medido do share difere do previsto (MAX_NAME_UNITS={MAX_NAME_UNITS}, "
         f"MAX_NAME_BYTES={names.MAX_NAME_BYTES}) em {mismatches}: "
-        "o valor medido vira o parâmetro max_name_units da instalação antes de fechar o gate"
+        "o valor medido vira o parâmetro max_name_units (ou max_name_bytes) da instalação "
+        "antes de fechar o gate"
     )
 
 

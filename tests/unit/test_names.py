@@ -193,8 +193,10 @@ def test_validate_filename_refuses_names_over_the_byte_limit() -> None:
         validate_filename("á" * 200, max_bytes=255)  # 200 unidades, 400 bytes
     with pytest.raises(NameTooLong):
         validate_filename("\U0001f600" * 64, max_bytes=255)  # 128 unidades, 256 bytes
-    # NFD é medido depois de virar NFC: 128 "á" decompostos = 256 bytes em NFC
+    # NFD é medido depois de virar NFC: 127 "á" decompostos são 381 bytes, mas 254 em NFC
     assert validate_filename(unicodedata.normalize("NFD", "á" * 127), max_bytes=255)
+    with pytest.raises(NameTooLong):  # 128 "á" decompostos viram 256 bytes em NFC
+        validate_filename(unicodedata.normalize("NFD", "á" * 128), max_bytes=255)
     # sem limite em bytes (macOS/Windows) vale só o limite em unidades
     assert validate_filename("á" * 200, max_bytes=None)
 

@@ -248,7 +248,12 @@ def test_accented_names_by_utf16_units_not_bytes(tree: Path) -> None:
     for index, name in enumerate(("á" * 196 + ".pdf", unicodedata.normalize("NFD", "á" * 128))):
         put(tree, f"{QUARANTINE_DIR}/u{index}", b"x")
         result = archive(
-            tree, f"{QUARANTINE_DIR}/u{index}", "Alfa/Fiscal", name, effects_enabled=True
+            tree,
+            f"{QUARANTINE_DIR}/u{index}",
+            "Alfa/Fiscal",
+            name,
+            max_name_bytes=None,
+            effects_enabled=True,
         )
         assert names.name_units(result.final_name) <= 255
         assert result.path.exists()
@@ -259,6 +264,32 @@ def test_accented_names_by_utf16_units_not_bytes(tree: Path) -> None:
         archive(
             tree, f"{QUARANTINE_DIR}/longo", "Alfa/Fiscal", "\U0001f600" * 128, effects_enabled=True
         )
+
+
+def test_name_over_the_byte_limit_is_refused_with_nothing_moved(
+    tree: Path, snapshot: Snapshot
+) -> None:
+    """Linux (cifs inclusive): 200 letras acentuadas cabem em UTF-16 mas são 400 bytes."""
+    source = put(tree, f"{QUARANTINE_DIR}/u", b"x")
+    before = snapshot(tree)
+    for effects in (True, False):
+        with pytest.raises(NameTooLong, match="bytes"):
+            archive(
+                tree,
+                f"{QUARANTINE_DIR}/u",
+                "Alfa/Fiscal",
+                "á" * 196 + ".pdf",
+                max_name_bytes=255,
+                effects_enabled=effects,
+            )
+    assert snapshot(tree) == before
+    assert source.read_bytes() == b"x"
+    fits = "á" * 125 + ".pdf"  # 254 bytes
+    result = archive(
+        tree, f"{QUARANTINE_DIR}/u", "Alfa/Fiscal", fits, max_name_bytes=255, effects_enabled=True
+    )
+    assert result.final_name == fits
+    assert result.path.read_bytes() == b"x"
 
 
 def test_measured_limit_is_propagated_by_archive(tree: Path, snapshot: Snapshot) -> None:

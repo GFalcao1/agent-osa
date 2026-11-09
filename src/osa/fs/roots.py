@@ -21,7 +21,13 @@ from pathlib import Path, PurePath
 
 from osa.domain.errors import Conflict, NotFound, UnsafePath
 from osa.fs.errors import CrossRoot, NameTooLong
-from osa.fs.names import MAX_NAME_UNITS, QUARANTINE_DIR, component_key, validate_folder_component
+from osa.fs.names import (
+    MAX_NAME_BYTES,
+    MAX_NAME_UNITS,
+    QUARANTINE_DIR,
+    component_key,
+    validate_folder_component,
+)
 
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 #: Na caminhada da raiz, cada componente é aberto por ``dir_fd`` sem seguir link. No macOS usa
@@ -182,6 +188,7 @@ def open_beneath(
     *,
     create: bool = False,
     max_name_units: int = MAX_NAME_UNITS,
+    max_name_bytes: int | None = MAX_NAME_BYTES,
 ) -> Iterator[OpenDir]:
     """Abre ``parts`` sob o descritor da raiz, sem seguir link, e entrega o último diretório.
 
@@ -204,7 +211,9 @@ def open_beneath(
                 entry = (
                     part
                     if part == QUARANTINE_DIR
-                    else validate_folder_component(part, max_units=max_name_units)
+                    else validate_folder_component(
+                        part, max_units=max_name_units, max_bytes=max_name_bytes
+                    )
                 )
                 try:
                     os.mkdir(entry, 0o755, dir_fd=current)

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from osa.domain.errors import Conflict, NotFound
-from osa.fs.names import MAX_NAME_UNITS, component_key, validate_folder_component
+from osa.fs.names import MAX_NAME_BYTES, MAX_NAME_UNITS, component_key, validate_folder_component
 from osa.fs.roots import open_beneath, open_root
 
 _MIN_YEAR = 1900
@@ -35,14 +35,17 @@ def _levels(
     departments: Sequence[DepartmentFolder],
     year: int | None,
     max_units: int,
+    max_bytes: int | None,
 ) -> list[tuple[str, ...]]:
     if year is not None and (isinstance(year, bool) or not _MIN_YEAR <= year <= _MAX_YEAR):
         raise ValueError(f"ano fora de {_MIN_YEAR}-{_MAX_YEAR}")
-    owner_name = validate_folder_component(owner, max_units=max_units)
+    owner_name = validate_folder_component(owner, max_units=max_units, max_bytes=max_bytes)
     levels: list[tuple[str, ...]] = [(owner_name,)]
     seen: set[str] = set()
     for department in departments:
-        folder = validate_folder_component(department.pasta, max_units=max_units)
+        folder = validate_folder_component(
+            department.pasta, max_units=max_units, max_bytes=max_bytes
+        )
         key = component_key(folder)
         if key in seen:
             raise Conflict("dois departamentos com a mesma pasta (caixa ou forma Unicode)")
@@ -61,6 +64,7 @@ def ensure_owner_tree(
     *,
     effects_enabled: bool = False,
     max_name_units: int = MAX_NAME_UNITS,
+    max_name_bytes: int | None = MAX_NAME_BYTES,
 ) -> TreeResult:
     """Garante ``<raiz>/<dono>/<departamento>/[<ano>/]`` criando só o que falta.
 
@@ -70,7 +74,7 @@ def ensure_owner_tree(
     ``usa_ano`` e ``year=None`` cria só a pasta do departamento. A raiz é aberta uma vez e todos
     os níveis nascem desse descritor. Nunca cria nem aceita ``.osa-quarentena``.
     """
-    levels = _levels(owner_folder, departments, year, max_name_units)
+    levels = _levels(owner_folder, departments, year, max_name_units, max_name_bytes)
     created: list[Path] = []
     existing: list[Path] = []
     base = Path(root)
@@ -84,7 +88,11 @@ def ensure_owner_tree(
             if parent not in absent:
                 try:
                     with open_beneath(
-                        root_fd, level, create=effects_enabled, max_name_units=max_name_units
+                        root_fd,
+                        level,
+                        create=effects_enabled,
+                        max_name_units=max_name_units,
+                        max_name_bytes=max_name_bytes,
                     ) as opened:
                         spelled[level] = opened.parts
                         path = base.joinpath(*opened.parts)

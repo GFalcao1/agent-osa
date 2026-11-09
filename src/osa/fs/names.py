@@ -11,7 +11,8 @@ from osa.domain.errors import UnsafePath
 from osa.fs.errors import NameTooLong
 
 #: Unidades UTF-16 do nome em NFC (limite do NTFS e do APFS). A suite native confirma no share;
-#: se o share medir menos, o valor entra como parâmetro ``max_name_units`` das operações.
+#: se o share medir menos, o valor entra como parâmetro ``max_name_units`` das operações
+#: (e ``max_name_bytes`` para o limite em bytes).
 MAX_NAME_UNITS: Final = 255
 #: Bytes UTF-8 do nome em NFC: o VFS do Linux limita cada componente a 255 bytes (``NAME_MAX``),
 #: inclusive num share cifs de um servidor Windows. ``None`` onde só vale o limite em unidades.

@@ -104,6 +104,12 @@ FOLDER_NAME_PROBLEMS: Final = (
         "Use um nome mais curto.",
     ),
     Problem(
+        "nome de pasta longo demais para o servidor de arquivos",
+        "O nome da pasta tem muitas letras com acento: cada uma ocupa o dobro de espaço no "
+        "servidor de arquivos.",
+        "Use um nome mais curto ou com menos acentos.",
+    ),
+    Problem(
         "nome de pasta contém caractere proibido",
         'Há um sinal que não pode fazer parte do nome de uma pasta: < > : " | ? * / ou \\.',
         "Tire esses sinais. " + _FOLDER_RETRY,
