@@ -1,8 +1,9 @@
-"""Nomes de arquivo e de pasta: NFC, limite em unidades UTF-16, regras do Windows e sufixos."""
+"""Nomes de arquivo e de pasta: NFC, limites em unidades UTF-16 e bytes, regras do Windows."""
 
 from __future__ import annotations
 
 import re
+import sys
 import unicodedata
 from typing import Final
 
@@ -12,6 +13,9 @@ from osa.fs.errors import NameTooLong
 #: Unidades UTF-16 do nome em NFC (limite do NTFS e do APFS). A suite native confirma no share;
 #: se o share medir menos, o valor entra como parâmetro ``max_name_units`` das operações.
 MAX_NAME_UNITS: Final = 255
+#: Bytes UTF-8 do nome em NFC: o VFS do Linux limita cada componente a 255 bytes (``NAME_MAX``),
+#: inclusive num share cifs de um servidor Windows. ``None`` onde só vale o limite em unidades.
+MAX_NAME_BYTES: Final[int | None] = 255 if sys.platform.startswith("linux") else None
 #: Pasta da quarentena dentro de cada raiz; nenhum nome de pasta válido começa com ponto.
 QUARANTINE_DIR: Final = ".osa-quarentena"
 #: Maior ``n`` tentado em `` (n)`` antes de ``CollisionExhausted``.
@@ -54,11 +58,23 @@ def name_units(name: str) -> int:
     return len(nfc(name).encode("utf-16-le", "surrogatepass")) // 2
 
 
+def name_bytes(name: str) -> int:
+    """Bytes UTF-8 do nome em NFC (o que o kernel do Linux conta)."""
+    return len(nfc(name).encode("utf-8", "surrogatepass"))
+
+
+def _check_length(value: str, *, max_units: int, max_bytes: int | None, what: str) -> None:
+    if name_units(value) > max_units:
+        raise NameTooLong(f"{what} excede {max_units} unidades UTF-16")
+    if max_bytes is not None and name_bytes(value) > max_bytes:
+        raise NameTooLong(f"{what} excede {max_bytes} bytes (limite do sistema)")
+
+
 def _is_forbidden(char: str) -> bool:
     return char in _FORBIDDEN_CHARS or unicodedata.category(char).startswith("C")
 
 
-def _validate_component(name: str, *, max_units: int, what: str) -> str:
+def _validate_component(name: str, *, max_units: int, max_bytes: int | None, what: str) -> str:
     value = nfc(name)
     if not value or not value.strip():
         raise UnsafePath(f"{what} vazio")
@@ -70,22 +86,29 @@ def _validate_component(name: str, *, max_units: int, what: str) -> str:
         raise UnsafePath(f"{what} não pode terminar com ponto ou espaço")
     if value.split(".", 1)[0].strip().casefold() in _RESERVED_WINDOWS:
         raise UnsafePath(f"{what} é reservado")
-    if name_units(value) > max_units:
-        raise NameTooLong(f"{what} excede {max_units} unidades UTF-16")
+    _check_length(value, max_units=max_units, max_bytes=max_bytes, what=what)
     return value
 
 
-def validate_filename(name: str, *, max_units: int = MAX_NAME_UNITS) -> str:
+def validate_filename(
+    name: str, *, max_units: int = MAX_NAME_UNITS, max_bytes: int | None = MAX_NAME_BYTES
+) -> str:
     """O nome em NFC se for um componente seguro; ``UnsafePath`` ou ``NameTooLong`` senão."""
-    return _validate_component(name, max_units=max_units, what="nome de arquivo")
+    return _validate_component(
+        name, max_units=max_units, max_bytes=max_bytes, what="nome de arquivo"
+    )
 
 
-def validate_folder_component(name: str, *, max_units: int = MAX_NAME_UNITS) -> str:
+def validate_folder_component(
+    name: str, *, max_units: int = MAX_NAME_UNITS, max_bytes: int | None = MAX_NAME_BYTES
+) -> str:
     """Como ``validate_filename`` e também recusa início com ponto.
 
     Assim nenhum dono ou departamento colide com ``.osa-quarentena``.
     """
-    value = _validate_component(name, max_units=max_units, what="nome de pasta")
+    value = _validate_component(
+        name, max_units=max_units, max_bytes=max_bytes, what="nome de pasta"
+    )
     if value.startswith("."):
         raise UnsafePath("nome de pasta não pode começar com ponto")
     return value
@@ -110,18 +133,28 @@ def split_name(name: str) -> tuple[str, str]:
     return name[:index], extension
 
 
-def suffixed(name: str, n: int, *, max_units: int = MAX_NAME_UNITS) -> str:
+def suffixed(
+    name: str,
+    n: int,
+    *,
+    max_units: int = MAX_NAME_UNITS,
+    max_bytes: int | None = MAX_NAME_BYTES,
+) -> str:
     """O nome da tentativa ``n``: ``n == 1`` é o próprio nome; ``n >= 2`` vira `` (n)``.
 
     Nunca trunca: se o resultado passa do limite, ``NameTooLong`` (com ``suffix=n``).
     """
     if n < 1:
         raise ValueError("n começa em 1")
-    value = validate_filename(name, max_units=max_units)
+    value = validate_filename(name, max_units=max_units, max_bytes=max_bytes)
     if n == 1:
         return value
     stem, extension = split_name(value)
     candidate = f"{stem} ({n}){extension}"
-    if name_units(candidate) > max_units:
-        raise NameTooLong(f"nome com sufixo ({n}) excede {max_units} unidades UTF-16", suffix=n)
+    try:
+        _check_length(
+            candidate, max_units=max_units, max_bytes=max_bytes, what=f"nome com sufixo ({n})"
+        )
+    except NameTooLong as error:
+        raise NameTooLong(str(error), suffix=n) from None
     return candidate

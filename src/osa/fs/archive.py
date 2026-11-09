@@ -41,6 +41,7 @@ from osa.fs.names import (
 from osa.fs.noreplace import Primitive, proven_primitive, rename_noreplace
 from osa.fs.roots import (
     find_entry,
+    list_dir,
     open_beneath,
     open_root,
     relative_parts,
@@ -182,7 +183,7 @@ def _relocate(
         same_dir = (source_stat.st_dev, source_stat.st_ino) == (dest_stat.st_dev, dest_stat.st_ino)
         if same_dir and component_key(entry) == component_key(final):
             raise Conflict("a origem já está no destino com esse nome")
-        taken = {component_key(existing) for existing in os.listdir(dest_dir.fd)}
+        taken = {component_key(existing) for existing in list_dir(dest_dir.fd)}
 
         for n in range(1, names.MAX_SUFFIX + 1):
             candidate = suffixed(final, n, max_units=max_name_units)

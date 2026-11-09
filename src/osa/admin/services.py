@@ -33,6 +33,7 @@ from osa.db.models import (
 from osa.domain.errors import AccessDenied, Conflict, NotFound, UnsafePath
 from osa.domain.owner import normalize_alias, normalize_cnpj
 from osa.domain.user import Role
+from osa.fs.roots import list_dir
 from osa.llm.envelopes import MAX_DESCRIPTION_LEN, validate_departments
 from osa.llm.provider import InvalidDepartments
 
@@ -119,7 +120,7 @@ def probe_directory_writable(path: Path) -> None:
             held, current = os.fstat(dir_fd), os.stat(path, follow_symlinks=False)
             if (held.st_dev, held.st_ino) != (current.st_dev, current.st_ino):
                 raise UnsafePath("raiz mudou durante a validação")
-            os.listdir(dir_fd)
+            list_dir(dir_fd)
         except OSError:
             raise UnsafePath("aplicação não consegue listar a raiz") from None
         name = f"{_PROBE_PREFIX}{uuid.uuid4().hex}"

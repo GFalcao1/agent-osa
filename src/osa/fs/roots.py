@@ -144,13 +144,28 @@ def open_root(root: Path | str) -> Iterator[int]:
         os.close(fd)
 
 
+def list_dir(dir_fd: int) -> list[str]:
+    """Os nomes do diretório de ``dir_fd``, lidos por um descritor novo, fechado ao fim.
+
+    No cifs do Linux o ``readdir`` repetido sobre o mesmo descritor (o ``os.listdir(fd)`` faz
+    ``dup``, e o ``dup`` divide o estado da listagem) devolve a listagem antiga: uma pasta recém
+    criada não aparece. Abrir ``"."`` sob o descritor dá uma listagem nova e não segue link.
+    Toda listagem de pasta do pacote passa por aqui.
+    """
+    fresh = os.open(".", _DIR_FLAGS | os.O_CLOEXEC, dir_fd=dir_fd)
+    try:
+        return os.listdir(fresh)
+    finally:
+        os.close(fresh)
+
+
 def find_entry(dir_fd: int, name: str) -> str | None:
     """A grafia gravada do componente ``name`` no diretório, ou ``None`` se não existe.
 
     Igual exato vence; senão compara por ``component_key`` (caixa e forma Unicode); dois
     candidatos distintos são ``Conflict``.
     """
-    entries = os.listdir(dir_fd)
+    entries = list_dir(dir_fd)
     if name in entries:
         return name
     key = component_key(name)

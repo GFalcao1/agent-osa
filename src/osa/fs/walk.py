@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from osa.fs.names import component_key
-from osa.fs.roots import open_beneath, open_root
+from osa.fs.roots import list_dir, open_beneath, open_root
 
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
@@ -96,7 +96,7 @@ def _visit(
     prune: frozenset[PruneKey] = frozenset(),
 ) -> Iterator[Visit]:
     try:
-        names = sorted(os.listdir(dir_fd))
+        names = sorted(list_dir(dir_fd))
     except OSError as error:
         yield SkippedDir(parts, f"pasta ilegível ({_code(error)})")
         return
@@ -176,7 +176,7 @@ def list_folder(
     parts = tuple(part for part in relative.split("/") if part)
     entries: list[FileEntry] = []
     with open_root(root) as root_fd, open_beneath(root_fd, parts) as folder:
-        for name in sorted(os.listdir(folder.fd)):
+        for name in sorted(list_dir(folder.fd)):
             if is_temporary_name(name):
                 continue
             try:
