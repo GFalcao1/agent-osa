@@ -1,0 +1,26 @@
+# Backup noturno do banco (TASK-112/113, SPEC §11): scripts/backup.sh, disparado por
+# osa-backup.timer. O script lê /opt/osa/.env pelo Python da instalação, como o app lê (nunca por
+# "source" no shell), e recusa a pasta se o share não estiver montado ou se ela estiver no disco
+# desta máquina ou dentro de uma raiz. As ferramentas do PostgreSQL 17 vêm do PGDG. Roda e sai.
+[Unit]
+Description=OSA backup do banco para o share
+After=network-online.target postgresql.service
+RequiresMountsFor=/mnt/osa-share
+
+[Service]
+Type=oneshot
+User=osa
+Group=osa
+WorkingDirectory=/opt/osa
+ExecStart=/opt/osa/scripts/backup.sh
+UMask=0077
+# /var/log/osa vem de deploy/tmpfiles/osa.conf (tem de existir antes do append:)
+Environment=PATH=/usr/lib/postgresql/17/bin:/usr/bin:/bin
+Environment=OSA_PYTHON=/opt/osa/.venv/bin/python
+Environment=OSA_ENV_FILE=/opt/osa/.env
+StandardOutput=append:/var/log/osa/backup.log
+StandardError=append:/var/log/osa/backup.log
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes

@@ -151,6 +151,17 @@ def test_the_mount_type_comes_from_the_longest_matching_mount_point() -> None:
     assert module.mount_fstype(Path("/mnt/acervo/b"), linux) == "cifs"
     assert module.mount_fstype(Path("/var/tmp"), linux) == "ext4"
     assert module.mount_fstype(Path("/Volumes/acervo2"), macos) == "apfs"  # not a prefix match
+    # systemd automount: the autofs trigger and the cifs mount stacked on the same point; the
+    # later line is the one on top, the share itself
+    automount = (
+        "/dev/sda2 on / type ext4 (rw)\n"
+        "systemd-1 on /mnt/acervo type autofs (rw,relatime,fd=60,timeout=0)\n"
+        "//srv/acervo on /mnt/acervo type cifs (rw,relatime,vers=3.1.1)\n"
+    )
+    assert module.mount_fstype(Path("/mnt/acervo/Backup OSA"), automount) == "cifs"
+    # the trigger alone (share not mounted yet) is not a network share
+    trigger = "/dev/sda2 on / type ext4 (rw)\nsystemd-1 on /mnt/acervo type autofs (rw)\n"
+    assert module.mount_fstype(Path("/mnt/acervo/b"), trigger) == "autofs"
 
 
 # --- /status e campos do log ---------------------------------------------------------------------

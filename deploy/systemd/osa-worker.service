@@ -1,0 +1,35 @@
+# osa-worker na VM Core (Linux, TASK-113). Instalação em /opt/osa (checkout + .venv), configuração em
+# /opt/osa/.env (lida pelo próprio processo; nada de segredo neste arquivo), conta de serviço
+# "osa". Instalar: sudo cp deploy/systemd/osa-*.service deploy/systemd/osa-*.timer
+# /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now osa-worker
+# Restart=always reinicia o processo se ele morrer; RestartSec evita reinício em laço.
+# RequiresMountsFor: sem o share montado o processo não sobe (raiz vazia nunca parece acervo
+# apagado). Trocar /mnt/osa-share se o ponto de montagem do fstab for outro.
+[Unit]
+Description=OSA worker (pasta monitorada, scan e lembretes)
+Wants=network-online.target osa-model-tunnel.service
+After=network-online.target postgresql.service osa-model-tunnel.service
+RequiresMountsFor=/mnt/osa-share
+
+[Service]
+Type=simple
+User=osa
+Group=osa
+WorkingDirectory=/opt/osa
+ExecStart=/opt/osa/.venv/bin/osa-worker
+Restart=always
+RestartSec=10
+UMask=0077
+# /var/log/osa vem de deploy/tmpfiles/osa.conf (tem de existir antes do append:)
+# o log JSON, reaberto pelo processo quando o logrotate o renomeia
+Environment=OSA_LOG_FILE=/var/log/osa/worker.log
+# só o que escapa antes do log começar (falha no import); também rotacionado
+StandardOutput=append:/var/log/osa/worker.stderr.log
+StandardError=append:/var/log/osa/worker.stderr.log
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

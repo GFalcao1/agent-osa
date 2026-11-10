@@ -101,7 +101,8 @@ def mount_fstype(path: Path, mount_output: str | None = None) -> str | None:
         else:
             continue
         inside = target == point or target.startswith(point.rstrip("/") + "/")
-        if inside and (best is None or len(point) > best[0]):
+        # ">=": on the same point the later line wins (mounts stack, the last one is on top)
+        if inside and (best is None or len(point) >= best[0]):
             best = (len(point), fstype)
     return best[1] if best else None
 

@@ -1,0 +1,6 @@
+# Linha do /etc/fstab para o share das raízes na Core (TASK-113). Trocar SERVIDOR/SHARE.
+# credentials: arquivo do root, modo 600, com username= e password= da conta de serviço do share.
+# nohandlecache: sem ele o cliente cifs serve listagem de pasta velha (lease de diretório).
+# x-systemd.automount: com o share fora, o acesso falha com erro em vez de mostrar uma pasta
+# local vazia; _netdev espera a rede. uid/gid: a conta osa é a única que lê os arquivos.
+//SERVIDOR/SHARE  /mnt/osa-share  cifs  credentials=/etc/osa/smb.cred,uid=osa,gid=osa,file_mode=0600,dir_mode=0700,vers=3.1.1,nohandlecache,_netdev,x-systemd.automount,x-systemd.mount-timeout=30  0  0
