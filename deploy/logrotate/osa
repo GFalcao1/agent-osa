@@ -1,0 +1,24 @@
+# Rotação dos logs do OSA no Linux (TASK-113). Instalar: sudo cp deploy/logrotate/osa /etc/logrotate.d/osa
+# Bot e worker escrevem o log JSON em OSA_LOG_FILE e o reabrem sozinhos quando o logrotate o
+# renomeia (sem sinal, sem copytruncate). Os *.stderr.log e o backup.log são abertos pelo systemd
+# em modo append e nunca reabertos: copytruncate. 14 arquivos comprimidos, modo 600, dono osa.
+/var/log/osa/bot.log /var/log/osa/worker.log {
+    su osa osa
+    size 10M
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0600 osa osa
+}
+
+/var/log/osa/bot.stderr.log /var/log/osa/worker.stderr.log /var/log/osa/backup.log {
+    su osa osa
+    size 1M
+    rotate 14
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

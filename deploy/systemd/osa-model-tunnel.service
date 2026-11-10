@@ -1,0 +1,24 @@
+# Túnel SSH da Core até o servidor do modelo (TASK-113). O Ollama continua só em loopback nas
+# duas pontas: na Core aparece em 127.0.0.1:11434 (OSA_OLLAMA_BASE_URL não muda) e no servidor do
+# modelo o túnel só alcança 127.0.0.1:11434 (permitopen na chave autorizada lá). Host, usuário,
+# chave e known_hosts ficam em /etc/osa/ssh_config (modelo em deploy/ssh/osa-model.conf).
+# ExitOnForwardFailure + Restart: se a porta local ou o servidor caírem, o ssh sai e volta.
+[Unit]
+Description=OSA túnel até o servidor do modelo
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=osa
+Group=osa
+ExecStart=/usr/bin/ssh -N -F /etc/osa/ssh_config osa-model
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

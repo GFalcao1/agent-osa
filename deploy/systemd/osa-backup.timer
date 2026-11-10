@@ -1,0 +1,12 @@
+# Dispara osa-backup.service às 2h30; Persistent roda o backup perdido se a Core estava desligada.
+# Ativar: sudo systemctl enable --now osa-backup.timer
+[Unit]
+Description=OSA backup noturno
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+Unit=osa-backup.service
+
+[Install]
+WantedBy=timers.target
