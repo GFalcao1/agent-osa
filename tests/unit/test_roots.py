@@ -368,10 +368,51 @@ def test_find_entry_prefers_exact_and_refuses_ambiguity(
     root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A ambiguidade só existe em volume sensível a caixa; aqui a listagem é simulada."""
-    monkeypatch.setattr(roots.os, "listdir", lambda fd: ["Alfa", "alfa", "Beta"])
+    monkeypatch.setattr(roots, "list_dir", lambda fd: ["Alfa", "alfa", "Beta"])
     assert roots.find_entry(0, "Alfa") == "Alfa"
     assert roots.find_entry(0, "alfa") == "alfa"
     assert roots.find_entry(0, "beta") == "Beta"
     assert roots.find_entry(0, "Gama") is None
     with pytest.raises(Conflict):
         roots.find_entry(0, "ALFA")
+
+
+# --- listagem por descritor novo (TASK-113): no cifs o readdir repetido no mesmo open fica velho
+
+
+def test_list_dir_reads_through_a_fresh_descriptor_and_closes_it(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prova só o mecanismo: a listagem velha do cifs não acontece em disco local, e só a suite
+    native no share pega a regressão (``test_template_quarentena_arquivamento_e_desfazer``)."""
+    (root / "A").mkdir()
+    listed: list[int] = []
+    real_listdir = os.listdir
+
+    def spy(target: int) -> list[str]:
+        listed.append(target)
+        return real_listdir(target)
+
+    monkeypatch.setattr(roots.os, "listdir", spy)
+    with open_root(root) as root_fd:
+        assert roots.list_dir(root_fd) == ["A"]
+        assert listed and listed[0] != root_fd  # nunca o descritor de longa duração
+        with pytest.raises(OSError):
+            os.fstat(listed[0])  # o descritor novo foi fechado
+        os.mkdir("B", dir_fd=root_fd)
+        assert sorted(roots.list_dir(root_fd)) == ["A", "B"]
+
+
+def test_no_listing_on_a_long_lived_descriptor_outside_list_dir() -> None:
+    import re
+
+    src = Path(roots.__file__).resolve().parents[1]
+    offenders = [
+        f"{path.relative_to(src)}:{number}"
+        for path in src.rglob("*.py")
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"\b(listdir|scandir|iterdir|fwalk)\(|os\.walk\(", line)
+        and path.name != "roots.py"
+        and path.parent.name in {"fs", "admin", "courier", "worker", "search"}
+    ]
+    assert offenders == [], "listar pasta só por osa.fs.roots.list_dir"

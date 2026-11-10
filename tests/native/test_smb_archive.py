@@ -193,6 +193,20 @@ def test_nome_de_200_caracteres_acentuados(tree: Path, note: Note) -> None:
     name = "á" * 196 + ".pdf"
     assert len(name) == 200
     put(tree / QUARANTINE_DIR / "u", b"conteudo")
+    if names.MAX_NAME_BYTES is not None and names.name_bytes(name) > names.MAX_NAME_BYTES:
+        # Linux: 200 caracteres acentuados são 400 bytes; recusa antes do efeito, sem truncar
+        with pytest.raises(NameTooLong):
+            archive(tree, f"{QUARANTINE_DIR}/u", "Alfa/Fiscal", name, effects_enabled=True)
+        assert (tree / QUARANTINE_DIR / "u").read_bytes() == b"conteudo"
+        assert not any(p.name.startswith("á") for p in (tree / "Alfa" / "Fiscal").iterdir())
+        note(f"nome de 200 caracteres ({names.name_bytes(name)} bytes) recusado pelo produto")
+        name = "á" * 125 + ".pdf"  # 254 bytes: o maior acentuado que o Linux grava
+        result = archive(tree, f"{QUARANTINE_DIR}/u", "Alfa/Fiscal", name, effects_enabled=True)
+        listed = [p.name for p in (tree / "Alfa" / "Fiscal").iterdir() if p.name.startswith("á")]
+        note(f"nome acentuado de {names.name_bytes(name)} bytes gravado e lido em NFC")
+        assert [unicodedata.normalize("NFC", n) for n in listed] == [name]
+        assert result.path.read_bytes() == b"conteudo"
+        return
     result = archive(tree, f"{QUARANTINE_DIR}/u", "Alfa/Fiscal", name, effects_enabled=True)
     listed = [p.name for p in (tree / "Alfa" / "Fiscal").iterdir()]
     note(f"nome de 200 caracteres: listdir devolveu {len(listed)} entrada(s)")
@@ -215,7 +229,10 @@ NAME_CASES = {
 
 
 def test_limite_de_nome_medido_no_share(work: Path, note: Note) -> None:
-    """Cria (sem apagar) nomes nos dois lados do limite e compara com ``MAX_NAME_UNITS``.
+    """Cria (sem apagar) nomes nos dois lados do limite e compara com o limite do produto.
+
+    O produto prevê ``MAX_NAME_UNITS`` unidades UTF-16 e, onde o sistema conta bytes (Linux),
+    também ``MAX_NAME_BYTES``.
 
     Só formas NFC são comparadas: o produto nunca grava NFD. Um nome NFD (que o servidor conta
     decomposto) entra apenas como informação.
@@ -228,7 +245,9 @@ def test_limite_de_nome_medido_no_share(work: Path, note: Note) -> None:
         note(f"nome nfd-128 (256 unidades decompostas, só informativo): errno={error.errno}")
     mismatches = []
     for label, name in NAME_CASES.items():
-        predicted = names.name_units(name) <= MAX_NAME_UNITS
+        predicted = names.name_units(name) <= MAX_NAME_UNITS and (
+            names.MAX_NAME_BYTES is None or names.name_bytes(name) <= names.MAX_NAME_BYTES
+        )
         try:
             put(work / name, b"x")
             accepted, code = True, None
@@ -242,8 +261,10 @@ def test_limite_de_nome_medido_no_share(work: Path, note: Note) -> None:
         if accepted != predicted:
             mismatches.append(label)
     assert not mismatches, (
-        f"o limite medido do share difere de MAX_NAME_UNITS={MAX_NAME_UNITS} em {mismatches}: "
-        "o valor medido vira o parâmetro max_name_units da instalação antes de fechar o gate"
+        f"o limite medido do share difere do previsto (MAX_NAME_UNITS={MAX_NAME_UNITS}, "
+        f"MAX_NAME_BYTES={names.MAX_NAME_BYTES}) em {mismatches}: "
+        "o valor medido vira o parâmetro max_name_units (ou max_name_bytes) da instalação "
+        "antes de fechar o gate"
     )
 
 

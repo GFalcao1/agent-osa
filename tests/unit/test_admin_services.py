@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,14 @@ def test_validate_folder_name_accepts_safe_names(name: str) -> None:
 def test_validate_folder_name_refuses_unsafe_names(name: str) -> None:
     with pytest.raises(ValueError):
         services.validate_folder_name(name)
+
+
+def test_validate_folder_name_refuses_more_than_255_bytes_on_every_platform() -> None:
+    assert services.validate_folder_name("á" * 127 + "a") == "á" * 127 + "a"  # 255 bytes
+    with pytest.raises(ValueError, match="longo demais"):
+        services.validate_folder_name("á" * 128)  # 128 letras, 256 bytes
+    nfd = unicodedata.normalize("NFD", "á" * 127 + "a")  # 382 bytes em NFD, 255 em NFC
+    assert services.validate_folder_name(nfd) == "á" * 127 + "a"
 
 
 def test_validate_folder_name_normalizes_to_nfc() -> None:

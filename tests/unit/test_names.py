@@ -101,7 +101,7 @@ def test_validate_filename_refuses_names_over_the_limit() -> None:
         validate_filename("a" * 256)
     with pytest.raises(NameTooLong):
         validate_filename("\U0001f600" * 128)  # 256 unidades
-    assert validate_filename("\U0001f600" * 127)
+    assert validate_filename("\U0001f600" * 127, max_bytes=None)  # 254 unidades, 508 bytes
     with pytest.raises(NameTooLong):
         validate_filename("a" * 21, max_units=20)  # limite medido menor, parametrizado
 
@@ -173,3 +173,44 @@ def test_suffixed_rejects_n_below_one_and_invalid_names() -> None:
         suffixed("a.pdf", 0)
     with pytest.raises(UnsafePath):
         suffixed("a:b.pdf", 2)
+
+
+# --- limite em bytes (TASK-113): o VFS do Linux limita o componente a 255 bytes ------------
+
+
+def test_byte_limit_follows_the_platform() -> None:
+    import sys
+
+    from osa.fs.names import MAX_NAME_BYTES
+
+    assert MAX_NAME_BYTES == (255 if sys.platform.startswith("linux") else None)
+
+
+def test_validate_filename_refuses_names_over_the_byte_limit() -> None:
+    assert validate_filename("a" * 255, max_bytes=255)
+    assert validate_filename("á" * 127 + "a", max_bytes=255)  # 255 bytes
+    with pytest.raises(NameTooLong, match="255 bytes"):
+        validate_filename("á" * 200, max_bytes=255)  # 200 unidades, 400 bytes
+    with pytest.raises(NameTooLong):
+        validate_filename("\U0001f600" * 64, max_bytes=255)  # 128 unidades, 256 bytes
+    # NFD é medido depois de virar NFC: 127 "á" decompostos são 381 bytes, mas 254 em NFC
+    assert validate_filename(unicodedata.normalize("NFD", "á" * 127), max_bytes=255)
+    with pytest.raises(NameTooLong):  # 128 "á" decompostos viram 256 bytes em NFC
+        validate_filename(unicodedata.normalize("NFD", "á" * 128), max_bytes=255)
+    # sem limite em bytes (macOS/Windows) vale só o limite em unidades
+    assert validate_filename("á" * 200, max_bytes=None)
+
+
+def test_validate_folder_component_refuses_names_over_the_byte_limit() -> None:
+    with pytest.raises(NameTooLong):
+        validate_folder_component("Contábil " + "é" * 130, max_bytes=255)
+    assert validate_folder_component("Contábil", max_bytes=255) == "Contábil"
+
+
+def test_suffixed_respects_the_byte_limit_without_truncating() -> None:
+    name = "á" * 125 + ".pdf"  # 254 bytes
+    assert suffixed(name, 1, max_bytes=255) == name
+    with pytest.raises(NameTooLong, match="bytes") as error:
+        suffixed(name, 2, max_bytes=255)
+    assert error.value.suffix == 2
+    assert suffixed("á" * 123 + ".pdf", 2, max_bytes=255) == "á" * 123 + " (2).pdf"  # 254

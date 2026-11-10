@@ -21,7 +21,13 @@ from pathlib import Path, PurePath
 
 from osa.domain.errors import Conflict, NotFound, UnsafePath
 from osa.fs.errors import CrossRoot, NameTooLong
-from osa.fs.names import MAX_NAME_UNITS, QUARANTINE_DIR, component_key, validate_folder_component
+from osa.fs.names import (
+    MAX_NAME_BYTES,
+    MAX_NAME_UNITS,
+    QUARANTINE_DIR,
+    component_key,
+    validate_folder_component,
+)
 
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 #: Na caminhada da raiz, cada componente é aberto por ``dir_fd`` sem seguir link. No macOS usa
@@ -144,13 +150,28 @@ def open_root(root: Path | str) -> Iterator[int]:
         os.close(fd)
 
 
+def list_dir(dir_fd: int) -> list[str]:
+    """Os nomes do diretório de ``dir_fd``, lidos por um descritor novo, fechado ao fim.
+
+    No cifs do Linux o ``readdir`` repetido sobre o mesmo descritor (o ``os.listdir(fd)`` faz
+    ``dup``, e o ``dup`` divide o estado da listagem) devolve a listagem antiga: uma pasta recém
+    criada não aparece. Abrir ``"."`` sob o descritor dá uma listagem nova e não segue link.
+    Toda listagem de pasta do pacote passa por aqui.
+    """
+    fresh = os.open(".", _DIR_FLAGS | os.O_CLOEXEC, dir_fd=dir_fd)
+    try:
+        return os.listdir(fresh)
+    finally:
+        os.close(fresh)
+
+
 def find_entry(dir_fd: int, name: str) -> str | None:
     """A grafia gravada do componente ``name`` no diretório, ou ``None`` se não existe.
 
     Igual exato vence; senão compara por ``component_key`` (caixa e forma Unicode); dois
     candidatos distintos são ``Conflict``.
     """
-    entries = os.listdir(dir_fd)
+    entries = list_dir(dir_fd)
     if name in entries:
         return name
     key = component_key(name)
@@ -167,6 +188,7 @@ def open_beneath(
     *,
     create: bool = False,
     max_name_units: int = MAX_NAME_UNITS,
+    max_name_bytes: int | None = MAX_NAME_BYTES,
 ) -> Iterator[OpenDir]:
     """Abre ``parts`` sob o descritor da raiz, sem seguir link, e entrega o último diretório.
 
@@ -189,7 +211,9 @@ def open_beneath(
                 entry = (
                     part
                     if part == QUARANTINE_DIR
-                    else validate_folder_component(part, max_units=max_name_units)
+                    else validate_folder_component(
+                        part, max_units=max_name_units, max_bytes=max_name_bytes
+                    )
                 )
                 try:
                     os.mkdir(entry, 0o755, dir_fd=current)

@@ -373,6 +373,9 @@ def _refusals(tmp_path: Path) -> dict[str, Callable[[], object]]:
         f"nome de pasta excede {services.MAX_FOLDER_NAME} caracteres": lambda: (
             services.validate_folder_name("a" * (services.MAX_FOLDER_NAME + 1))
         ),
+        "nome de pasta longo demais para o servidor de arquivos": lambda: (
+            services.validate_folder_name("á" * 128)  # 128 letras, 256 bytes
+        ),
         "nome de pasta contém caractere proibido": lambda: services.validate_folder_name("a/b"),
         "nome de pasta não pode começar ou terminar com ponto ou espaço": lambda: (
             services.validate_folder_name(".oculta")
